@@ -1,6 +1,7 @@
 // E6 S-1977·S-1982~1986·S-1994: 컴포넌트 밖 실행 상태. repo 경로마다 따로 — 스튜디오를 닫아도, 다른 워크스페이스로 가도 실행은 계속된다.
 // 앱을 끄면 사라진다(저장 안 함: S-1209 숨은 세션 정리).
 import { create } from "zustand";
+import { classifyBlock } from "../../hidden/detect";
 import { t, tm } from "../../i18n";
 import { docDelete, docGet, docList, docPut, type DocMeta } from "../../lib/ipc";
 import { effortLimitMs, studioRun, type Effort, type StudioPhase, type StudioResult, type StudioRunOpts } from "../run";
@@ -91,6 +92,7 @@ export async function startRun(repo: string, req: { docId: string; ask?: string;
       notice = t("Could not save the document: {err}", { err: String(e) });
     }
   } else if ("timeout" in res) notice = NOTHING;
+  else if ("blocked" in res && classifyBlock(res.why).kind === "permission") notice = t("{name} asked for permission to use a tool: {question} Allow it in this repo's Claude permission settings, then try again.", { name: agentName(req.agentId), question: classifyBlock(res.why).line });
   else if ("blocked" in res) notice = t("{name} is asking a question Symvibe will not answer for you. Open a console in this repo, answer it there, and try again.", { name: agentName(req.agentId) });
   else if ("error" in res) notice = res.error;
   patch(repo, () => ({ run: null, notice }));

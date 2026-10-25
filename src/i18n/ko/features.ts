@@ -118,6 +118,7 @@ export default {
   "{n} busy": "{n}곳 바쁨",
   "{n} left out": "{n}개 제외",
   "{name} needs an answer. Open a console of it, answer, and scan again.": "{name}가 답을 기다리고 있어요. 그 콘솔을 열어 답한 뒤 다시 스캔하세요.",
+  "{name} asked for permission to use a tool: {question} Allow it in this repo's Claude permission settings, then scan again.": "{name}가 도구 사용 권한을 물었어요: {question} 이 저장소의 Claude 권한 설정에서 허용한 뒤 다시 스캔하세요.",
   "The scan took too long.": "스캔이 너무 오래 걸렸어요.",
   "The check took too long.": "확인이 너무 오래 걸렸어요.",
   "Install Claude Code or Codex": "Claude Code나 Codex를 설치하세요",
@@ -212,6 +213,12 @@ export default {
   "Undo, redo and workspace commands work from the main command bar.": "실행 취소, 다시 실행, 워크스페이스 명령은 메인 명령줄에서 쓸 수 있어요.",
   "That works from the main command bar.": "그건 메인 명령줄에서 쓸 수 있어요.",
   // ── Usage ──
+  "Daily limit": "일일 한도",
+  "Messages": "메시지",
+  "Total Cost": "총 비용",
+  "Avg Cost/Day": "하루 평균 비용",
+  "OpenCode has no plan limits here — totals from `opencode stats`": "OpenCode는 여기서 플랜 한도가 없어요 — `opencode stats`의 합계예요",
+
   "On this PC, Claude Code may keep its sign-in in Windows Credential Manager, which profiles can't fully isolate yet. After switching, verify the account with /status inside the console.": "이 PC에서는 Claude Code가 로그인 정보를 Windows 자격 증명 관리자에 보관할 수 있어서 프로필로 완전히 분리하지 못해요. 전환한 뒤에는 콘솔에서 /status로 계정을 확인하세요.",
   "Remove {name}? Its saved sign-in is deleted for good; settings and conversation history move to the Recycle Bin.": "{name}을(를) 제거할까요? 저장된 로그인 정보는 완전히 삭제되고, 설정과 대화 기록은 휴지통으로 옮겨져요.",
   "Whether you may hold several accounts is up to each provider. Symvibe never pools or rotates accounts.": "계정을 여러 개 가질 수 있는지는 제공사마다 달라요. Symvibe는 계정을 합치거나 돌려 쓰지 않아요.",
@@ -288,4 +295,25 @@ export default {
   "Asking {name} for a summary.": "{name}에게 요약을 요청하는 중이에요.",
   "Brief delivered to {name}.": "{name}에 브리핑을 전달했어요.",
   "Not sent — paste it yourself:": "보내지 못했어요. 직접 붙여 넣으세요:",
+  // ── H2 All conversations (S-2833) ──
+  "All conversations": "모든 대화",
+  "Place on board": "보드에 놓기",
+  "No folder": "폴더 없음",
+  "By folder": "폴더별",
+  "By date": "날짜별",
+  "Yesterday": "어제",
+  "Previous 7 days": "지난 7일",
+  "Previous 30 days": "지난 30일",
+  "Loading conversations…": "대화를 불러오는 중…",
+  "No conversations match": "맞는 대화가 없어요",
+  "No conversations yet": "아직 대화가 없어요",
+  "Couldn't read conversations: {reason}": "대화를 읽지 못했어요: {reason}",
+  "Search conversations": "대화 검색",
+  "The original folder is missing, so this conversation can't be resumed": "원래 폴더가 없어서 이 대화를 이어갈 수 없어요",
+  "This conversation has no folder": "이 대화에는 폴더 정보가 없어요",
+  "{n} messages": "메시지 {n}개",
+  // ── H3 보드에 놓기 (S-2846) ──
+  "Already on a board — jumped to it": "이미 보드에 있어서 그쪽으로 옮겼어요",
+  // ── Q3 대화 기록 지원 표 (S-3140·S-3153) ──
+  "Symvibe can't read {name}'s chat history yet": "Symvibe는 아직 {name}의 대화 기록을 읽을 수 없어요",
 } as Record<string, string>;

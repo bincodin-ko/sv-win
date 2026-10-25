@@ -120,7 +120,7 @@ async function partial(me: number) {
     const pcm = h.snapshot();
     if (!passesGate(pcmStats(pcm))) return;
     const st = useSettings.getState().s;
-    const text = filterHallucination(await voiceTranscribe(pcmToWav(pcm), langArg(String(st.speechLanguage ?? "auto")), promptHint([]), currentModel())).trim();
+    const text = filterHallucination(await voiceTranscribe(pcmToWav(pcm), langArg(String(st.speechLanguage ?? "auto")), promptHint([], undefined, String(st.speechLanguage ?? "auto")), currentModel())).trim();
     if (me === job && useListen.getState().src) set({ partial: text });
   } catch { /* 부분 글은 있으면 좋은 것 */ } finally { partialBusy = false; }
 }
@@ -150,7 +150,7 @@ async function end(src: Src, send: boolean, why: string) {
     const language = String(st.speechLanguage ?? "auto");
     let text: string;
     if (src === "dict") { // S-2277: 같은 파이프, snapNames 는 적용하지 않는다
-      text = passesGate(pcmStats(pcm)) ? filterHallucination(await voiceTranscribe(pcmToWav(pcm), langArg(language), promptHint([]), currentModel())).trim() : "";
+      text = passesGate(pcmStats(pcm)) ? filterHallucination(await voiceTranscribe(pcmToWav(pcm), langArg(language), promptHint([], undefined, language), currentModel())).trim() : "";
     } else {
       const names = Object.values(getStore(ctx!.wsId).getState().nodes).filter(isConsole).map((n) => n.name);
       text = await transcribe(pcm, { language, names, model: currentModel() });

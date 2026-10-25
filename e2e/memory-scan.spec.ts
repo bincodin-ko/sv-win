@@ -158,6 +158,18 @@ test.describe("스캔 S-1380~S-1388", () => {
     await expect(page.getByTestId("console")).toHaveCount(2);
   });
 
+  test("권한 질문 막힘은 질문 줄과 설정 안내, 콘솔 열기 없음", async ({ page }) => {
+    await seed(page);
+    await openPanel(page);
+    await page.getByTestId("memory-scan").click();
+    const id = await startedBy(page, () => page.getByTestId("scan-go").click());
+    await emit(page, id, "Bash command\r\n  git push origin main\r\nDo you want to proceed?\r\n 1. Yes\r\n 2. No, and tell Claude what to do differently\r\n");
+    await expect(page.getByTestId("scan-error")).toContainText("Claude asked for permission to use a tool:");
+    await expect(page.getByTestId("scan-error")).toContainText("git push origin main");
+    await expect(page.getByTestId("scan-open-console")).toHaveCount(0);
+    await expect(page.getByTestId("scan-retry")).toBeVisible();
+  });
+
   test("S-1383 답을 못 읽으면 오류 문구", async ({ page }) => {
     await seed(page);
     await openPanel(page);

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { agentsList } from "../agents/api";
 import { getStore } from "../board/boards";
 import { isConsole } from "../board/store";
-import { getRepoPath } from "../console/offers";
+import { consoleCwd } from "../console/offers";
 import { sessionKey } from "../console/sessionKey";
 import { getSession } from "../console/session";
 import { typeAndSubmit } from "../console/submit";
@@ -46,7 +46,7 @@ export default function OutputViewer({ wsId, nodeId, onClose }: { wsId: string; 
   const body = reply ?? "";
   const copy = () => void navigator.clipboard.writeText(body).then(() => setNote(t("Copied")), () => setNote(t("Copy failed")));
   const save = async () => {
-    const repo = getRepoPath(wsId);
+    const repo = consoleCwd(wsId, node);
     if (!repo) return setNote(t("No repo folder to save in"));
     const { header, stamp } = savedStamps(new Date(), name, agentName);
     try {

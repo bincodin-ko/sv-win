@@ -164,6 +164,7 @@ export default {
   "Uses one turn of your {name} plan.": "{name} 요금제의 한 턴을 써요.",
   "Nothing came back. Try Quick, or a narrower ask.": "결과가 오지 않았어요. 빠르게로 해 보거나 요청을 좁혀 보세요.",
   "Could not save the document: {err}": "문서를 저장하지 못했어요: {err}",
+  "{name} asked for permission to use a tool: {question} Allow it in this repo's Claude permission settings, then try again.": "{name}가 도구 사용 권한을 물었어요: {question} 이 저장소의 Claude 권한 설정에서 허용한 뒤 다시 시도하세요.",
   "{name} is asking a question Symvibe will not answer for you. Open a console in this repo, answer it there, and try again.": "{name}이(가) Symvibe가 대신 답할 수 없는 질문을 하고 있어요. 이 저장소에서 콘솔을 열어 직접 답한 뒤 다시 시도하세요.",
   "Building pages…": "쪽을 만드는 중…",
   "Pages preview": "쪽 미리보기",

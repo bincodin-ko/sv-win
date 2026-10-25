@@ -41,3 +41,13 @@ export function pasteLineCount(text: string): number {
 export function joinOneLine(text: string): string {
   return text.replace(/(\r\n|\r|\n)+$/, "").replace(/(\r\n|\r|\n)+/g, " ");
 }
+
+/** 우클릭 직후(ms 안)에 브라우저가 낸 진짜(isTrusted) paste 는 우클릭 붙여넣기다 → 막는다. 메뉴 Paste(합성 이벤트)·Ctrl+V 는 통과 */
+export function isStrayPaste(trusted: boolean, now: number, lastRightAt: number, windowMs = 800): boolean {
+  return trusted && lastRightAt > 0 && now - lastRightAt < windowMs;
+}
+
+/** 한글 등 조합 중(isComposing / keyCode 229)인 keydown 은 xterm 키 처리에서 막는다 → 확정 글자는 compositionend 로만 한 번 간다 */
+export function imeKeyBlocked(ev: { isComposing?: boolean; keyCode?: number }): boolean {
+  return !!ev.isComposing || ev.keyCode === 229;
+}

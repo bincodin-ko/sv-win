@@ -11,6 +11,7 @@ import { closeRepoAsk, type AppKeyAction } from "./appKeys";
 import { cycleConsole, cycleRegion, focusCommandBar } from "./regions";
 import { handleOf, useShell } from "./useShell";
 import { t, tp } from "../i18n";
+import { hubPathOf } from "./hubPath";
 
 export type WsItem = { id: string; name: string };
 export const MAX_NAME = 24;
@@ -33,8 +34,11 @@ export function findWorkspace(list: WsItem[], query: string): WsItem | null {
 
 // ---- 동작(repos.json + boardArchive + useShell) ----
 /** repos.json 의 repo·워크스페이스 목록을 화면이 따라 읽게 둔 사본(탭·repo chip) */
-export const useRepoList = create<{ repos: RepoInfo[] }>(() => ({ repos: [] }));
-export const refreshRepos = async (): Promise<void> => useRepoList.setState({ repos: (await reposGet()).repos });
+export const useRepoList = create<{ repos: RepoInfo[]; hubs: WsItem[] }>(() => ({ repos: [], hubs: [] }));
+export const refreshRepos = async (): Promise<void> => {
+  const r = await reposGet();
+  useRepoList.setState({ repos: r.repos, hubs: r.hubs ?? [] });
+};
 
 const newId = () => `ws-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
@@ -67,6 +71,44 @@ export async function createWorkspace(repoPath: string): Promise<WsItem | null> 
   await editRepos((rs) => mapRepo(rs, repoPath, (r) => ({ ...r, workspaces: [...r.workspaces, ws] })));
   useShell.getState().openWorkspace({ path: repoPath, ...ws });
   return ws;
+}
+
+/** H5 S-2870: 안 쓰인 가장 작은 번호의 "Hub N" */
+export function nextHubName(names: string[]): string {
+  const used = new Set(names.map((n) => /^Hub (\d+)$/.exec(n)?.[1]).filter(Boolean).map(Number));
+  let n = 1;
+  while (used.has(n)) n++;
+  return `Hub ${n}`;
+}
+
+/** H5 S-2870: 새 Hub 보드를 hubs 에 더하고 연다(lastRepo = hub:<id>) */
+export async function createHub(): Promise<WsItem> {
+  const id = newId();
+  let name = "";
+  await updateRepos((r) => {
+    name = nextHubName((r.hubs ?? []).map((h) => h.name));
+    return { ...r, hubs: [...(r.hubs ?? []), { id, name }], lastRepo: hubPathOf(id) };
+  });
+  useShell.getState().openWorkspace({ path: hubPathOf(id), id, name });
+  return { id, name };
+}
+
+/** H5 S-2871: 홈 Hub 행을 눌러 연다(열려 있으면 그 보드로) */
+export function openHub(h: WsItem): void {
+  const path = hubPathOf(h.id);
+  const s = useShell.getState();
+  const open = openRepoOf(path);
+  if (open?.activeWs) s.showWorkspace(open.activeWs);
+  else s.openWorkspace({ path, id: h.id, name: h.name });
+  void updateRepos((r) => (r.lastRepo === path ? r : { ...r, lastRepo: path }));
+}
+
+/** H5 S-2871: Hub 를 목록에서 뺀다(열려 있으면 콘솔을 끝내고 닫는다). 보드 파일은 지우지 않는다 */
+export async function removeHub(id: string): Promise<void> {
+  const path = hubPathOf(id);
+  openIds(path).forEach(killAll);
+  useShell.getState().closeRepo(path);
+  await updateRepos((r) => ({ ...r, hubs: (r.hubs ?? []).filter((h) => h.id !== id), lastRepo: r.lastRepo === path ? null : r.lastRepo }));
 }
 
 /** S-335 이름 바꾸기. 빈 글이면 바꾸지 않는다 */
@@ -124,7 +166,7 @@ export async function closeRepoFlow(repoPath: string, source: "button" | "key"):
   if (useUi.getState().studio.open) useUi.getState().closeStudio();
   const n = ids.reduce((a, id) => a + runningIds(id).length, 0);
   if (closeRepoAsk(source, n)) {
-    const name = useRepoList.getState().repos.find((r) => r.path === repoPath)?.name ?? baseName(repoPath);
+    const name = useRepoList.getState().repos.find((r) => r.path === repoPath)?.name ?? useRepoList.getState().hubs.find((h) => hubPathOf(h.id) === repoPath)?.name ?? baseName(repoPath);
     const ok = await confirmDialog({
       title: t("Close {name}?", { name }),
       message: n ? tp("{n} running console will end. Boards are saved.", "{n} running consoles will end. Boards are saved.", n) : t("Boards are saved."),

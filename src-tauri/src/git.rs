@@ -774,9 +774,9 @@ pub mod cmds {
     }
     #[tauri::command]
     pub async fn git_discard(repo: String, path: String, tracked: bool) -> GitResult {
-        // C2 합친 뒤 연결: 아래 훅을 `|p| crate::fs::trash_move(p.to_string_lossy().into_owned())` 로 바꾼다.
+        // C2 합친 뒤 연결: 아래 훅을 `|p| crate::fs::trash_move_sync(p.to_string_lossy().into_owned())` 로 바꾼다.
         // 그 전에는 휴지통이 없으므로 아무것도 지우지 않고 거절한다.
-        blocking(move || discard(Path::new(&repo), &path, tracked, &|p| crate::fs::trash_move(p.to_string_lossy().into_owned()))).await
+        blocking(move || discard(Path::new(&repo), &path, tracked, &|p| crate::fs::trash_move_sync(p.to_string_lossy().into_owned()))).await
     }
     #[tauri::command]
     pub async fn git_oversize(repo: String, paths: Vec<String>) -> GitOversize {

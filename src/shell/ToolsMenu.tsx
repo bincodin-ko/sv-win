@@ -3,12 +3,15 @@ import { openSettings, useUi } from "../ui/useUi";
 import { requestOpenStudio } from "../studio/useStudio";
 import { getStudio, type StudioId } from "../studio/registry";
 import { Menu, MenuItem } from "./Menu";
+import { isHub } from "./hubPath";
+import { useShell } from "./useShell";
 import { tm, useT } from "../i18n";
 
 // S-1804: Code·Markdown·Skills 는 그 스튜디오가 등록돼 있고 tools 가 있을 때만 나온다(눌러도 안 되는 항목 금지)
 const studioItem = (id: StudioId, label: string): ToolItem => ({ id, label, run: () => void requestOpenStudio(id), when: () => !!getStudio(id)?.tools });
 type ToolItem = { id: string; label: string; run: () => void; when?: () => boolean };
 export const toolsItems: ToolItem[] = [
+  { id: "conversations", label: tm("All conversations"), run: () => useUi.getState().openConversations() }, // 화면은 ConversationsScreen (H2)
   { id: "presets", label: tm("Presets"), run: () => useUi.setState({ presetsOpen: true }) }, // 창은 PresetsHost (B14)
   { id: "github", label: "GitHub", run: () => useUi.getState().openGit() }, // 패널은 GitHost (C9)
   studioItem("code", "Code"),
@@ -20,11 +23,15 @@ export const toolsItems: ToolItem[] = [
   { id: "settings", label: tm("Settings"), run: () => openSettings() },
 ];
 
+/** H5 S-2876: Hub 보드(폴더 없음)에서 숨기는 Tools 항목 */
+export const HUB_HIDDEN = ["github", "code", "markdown", "memory", "skills", "loops"];
+
 export default function ToolsMenu() {
   const t = useT();
+  const hub = isHub(useShell((s) => s.activeRepo));
   return (
     <Menu testId="tools-btn" label={t("Tools") + " ▾"}>
-      {(close) => toolsItems.filter((i) => i.when?.() ?? true).map((i) => <MenuItem key={i.id} onClick={() => { close(); i.run(); }}>{t(i.label)}</MenuItem>)}
+      {(close) => toolsItems.filter((i) => (i.when?.() ?? true) && !(hub && HUB_HIDDEN.includes(i.id))).map((i) => <MenuItem key={i.id} onClick={() => { close(); i.run(); }}>{t(i.label)}</MenuItem>)}
     </Menu>
   );
 }

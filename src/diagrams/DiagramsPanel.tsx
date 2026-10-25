@@ -2,17 +2,17 @@
 import { useEffect, useState } from "react";
 import { tm, useT } from "../i18n";
 import { agentsList, type AgentInfo } from "../agents/api";
+import { canReadTranscript, pickerRows } from "../agents/transcriptSupport";
 import { useScope } from "../board/BoardScope";
 import { menuBox, useEscClose } from "../board/menus/menuKit";
 import { useSettings } from "../settings/useSettings";
 import { useShell } from "../shell/useShell";
 import type { Effort } from "../studio/run";
 import { DIAGRAM_TOPICS } from "./prompt";
-import { agentName, canStart, startRun, useRun } from "./runner";
+import { canStart, startRun, useRun } from "./runner";
 import { placeStarter, STARTERS } from "./starters";
 import { useDiagramStyle } from "./style";
 
-const AGENTS = ["claude", "codex"];
 const EFFORTS: { id: Effort; label: string }[] = [{ id: "quick", label: tm("Quick") }, { id: "balanced", label: tm("Balanced") }, { id: "thorough", label: tm("Thorough") }];
 const head: React.CSSProperties = { font: "600 10px system-ui", letterSpacing: 1, color: "var(--fg-3)", margin: "10px 0 4px" };
 const chip = (on: boolean, off = false): React.CSSProperties => ({ padding: "4px 9px", border: "1px solid " + (on ? "var(--accent)" : "var(--bd)"), borderRadius: 14, background: on ? "var(--accent)" : "transparent", color: on ? "var(--accent-ink)" : "inherit", font: "12px system-ui", cursor: off ? "default" : "pointer", opacity: off ? 0.4 : 1 });
@@ -30,7 +30,7 @@ export default function DiagramsPanel({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState("");
   useEscClose(onClose);
   useEffect(() => void agentsList().then(setAgents), []);
-  const agentId = (s.diagramsAgent as string) ?? (AGENTS.includes(s.defaultAgent as string) ? (s.defaultAgent as string) : "claude"); // Documents 와 같은 기본
+  const agentId = (s.diagramsAgent as string) ?? (canReadTranscript(s.defaultAgent as string).ok ? (s.defaultAgent as string) : "claude"); // Documents 와 같은 기본
   const effort = ((s.diagramsEffort as Effort) ?? "balanced");
   const start = (subject: string) => {
     if (!canStart({ repo, running, subject })) return;
@@ -45,13 +45,13 @@ export default function DiagramsPanel({ onClose }: { onClose: () => void }) {
       {!repo && <div data-testid="dia-need-repo" style={{ color: "var(--accent)", marginBottom: 6 }}>{t("Open a repo first.")}</div>}
       <div style={{ ...head, marginTop: 0 }}>{t("MODEL")}</div>
       <div style={row}>
-        {AGENTS.map((id) => {
-          const installed = agents.find((a) => a.id === id)?.installed ?? false;
-          return <button key={id} data-testid={`dia-agent-${id}`} data-installed={installed} aria-pressed={agentId === id} disabled={!installed || running} style={chip(agentId === id, !installed)} onClick={() => patch({ diagramsAgent: id })}>{agentName(id)}</button>;
-        })}
+        {pickerRows(agents, ["claude", "codex"]).map((r) => (
+          <button key={r.id} data-testid={`dia-agent-${r.id}`} data-installed={r.enabled} aria-pressed={agentId === r.id} disabled={!r.enabled || running} title={r.why} style={chip(agentId === r.id, !r.enabled)} onClick={() => patch({ diagramsAgent: r.id })}>{r.name}</button>
+        ))}
         <span style={{ flex: 1 }} />
         {EFFORTS.map((e) => <button key={e.id} data-testid={`dia-effort-${e.id}`} aria-pressed={effort === e.id} disabled={running} style={chip(effort === e.id)} onClick={() => patch({ diagramsEffort: e.id })}>{t(e.label)}</button>)}
       </div>
+      {pickerRows(agents, ["claude", "codex"]).filter((r) => r.why).map((r) => <div key={r.id} data-testid={`dia-why-${r.id}`} style={{ color: "var(--text-dim)", font: "12px system-ui", marginTop: 4 }}>{r.why}</div>)}
       <div style={head}>{t("STYLE")}</div>
       <div style={row}>
         {(["ink", "colorful"] as const).map((id) => <button key={id} data-testid={`dia-style-${id}`} aria-pressed={style === id} style={chip(style === id)} onClick={() => setStyle(id)}>{id === "ink" ? t("Ink") : t("Colorful")}</button>)}

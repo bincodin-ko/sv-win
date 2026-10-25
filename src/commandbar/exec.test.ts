@@ -22,7 +22,7 @@ import { useLoops } from "../loops/store";
 import { useUi } from "../ui/useUi";
 import { showNotice } from "../lib/notice";
 import { cancelPending } from "./deliver";
-import { execute, runIntent } from "./exec";
+import { execute, onlyInstalled, runIntent } from "./exec";
 import { useConfirm } from "./confirm";
 import { clearOrders } from "./report";
 import { useThread } from "./thread";
@@ -76,6 +76,16 @@ describe("S-600 시작·그룹 (S-533 상한)", () => {
     expect(nodes().map((n) => n.agentId)).toEqual(["codex", "codex", "codex"]);
     expect(store.getState().groups).toHaveLength(0);
     expect(last()).toMatch(/3/);
+  });
+  it("spawn name -> 콘솔 이름이 붙고, 둘 이상이면 뒤에 번호가 붙는다", async () => {
+    await runIntent({ t: "spawn", n: 1, agentId: "claude", name: "검토자" }, ctx);
+    expect(nodes().map((n) => (n as { name?: string }).name)).toEqual(["검토자"]);
+    await runIntent({ t: "spawn", n: 2, agentId: "claude", name: "검토자" }, ctx);
+    expect(nodes().map((n) => (n as { name?: string }).name).sort()).toEqual(["검토자", "검토자 2", "검토자 3"]);
+  });
+  it("planner 에 줄 에이전트는 설치된 것만", () => {
+    const all = [{ id: "claude", name: "C", aliases: [] }, { id: "aider", name: "A", aliases: [] }];
+    expect(onlyInstalled(all, [{ id: "claude", installed: true }, { id: "aider", installed: false }])).toEqual([all[0]]);
   });
   it("역할을 주면 그 역할 그룹으로", async () => {
     await runIntent({ t: "spawn", n: 2, agentId: "claude", role: "backend" }, ctx);
@@ -257,6 +267,10 @@ describe("S-600 테마·되돌리기·카메라·답", () => {
     expect(last()).toMatch(/^I couldn't read that without the planner\. Start with who it is for, like @Otto/);
     await runIntent({ t: "smallTalk" }, ctx);
     expect(useThread.getState().byRepo["r"]!.at(-1)!.role).toBe("bot");
+  });
+  it("S-2901a execute: __plannerTest 없으면 못 읽는 문장은 기존 문구 그대로", async () => {
+    await execute("blorp zxq vlorf", ctx);
+    expect(last()).toMatch(/^I couldn't read that without the planner\./);
   });
   it("status 는 상태별 개수를 센다", async () => {
     add(); add("claude", { status: "WORKING" });

@@ -18,7 +18,7 @@ export const CONSOLE_W = 720;
 export const CONSOLE_H = 440;
 export const CONSOLE_MIN_W = 360;
 export const CONSOLE_MIN_H = 200;
-export type ConsoleNode = BoardNode & { kind: "console"; name: string; agentId: string; textSize: number | null; yolo: boolean; groupId?: string; profile?: string };
+export type ConsoleNode = BoardNode & { kind: "console"; name: string; agentId: string; textSize: number | null; yolo: boolean; groupId?: string; profile?: string; cwd?: string };
 export const isConsole = (n: BoardNode | undefined): n is ConsoleNode => n?.kind === "console";
 
 /** 되돌리기 한 단계 = 노드와 그룹(S-510) */
@@ -66,7 +66,7 @@ type BoardState = {
   bringToFront: (ids: string[]) => void;
   /** C1 S-810: 선택한 노드를 맨 뒤로(z 최소, 서로의 순서 유지). 1단계 기록 */
   sendToBack: (ids: string[]) => void;
-  spawnConsole: (agentId: string, at?: { x: number; y: number }, opts?: { textSize?: number | null; profile?: string | null }) => string;
+  spawnConsole: (agentId: string, at?: { x: number; y: number }, opts?: { textSize?: number | null; profile?: string | null; cwd?: string }) => string;
   /** B8: 콘솔 여럿을 격자 덩어리로 한 번에 놓는다(S-526). group 이 있고 둘 이상이면 같은 단계에서 묶는다(S-527). at = 덩어리 왼쪽 위 */
   spawnMany: (agentIds: string[], at?: { x: number; y: number }, group?: { name: string; role: Group["role"] }) => { ids: string[]; groupId: string | null };
   /** A7: 무장된 에이전트(S-043, null = 없음)·최근 에이전트 ≤3(S-012). 설정 파일에 저장 */
@@ -74,7 +74,7 @@ type BoardState = {
   recentAgents: string[];
   setArmed: (id: string | null) => void;
   /** 콘솔을 놓고 선택하고 최근 목록에 올린다(레일·고리·빈 보드 공용). 새 id */
-  spawnAgent: (agentId: string, at?: { x: number; y: number }) => string;
+  spawnAgent: (agentId: string, at?: { x: number; y: number }, opts?: { cwd?: string }) => string;
   /** 시작 때 한 번: 저장된 무장·최근 읽기(무장이 없으면 기본 에이전트, S-043) */
   loadPrefs: () => Promise<void>;
 };
@@ -135,8 +135,8 @@ export const makeBoardStore = () => create<BoardState>((set, get) => {
   armedAgent: null,
   recentAgents: [],
   setArmed: (id) => { set({ armedAgent: id }); void settingsSet({ armedAgent: id }); },
-  spawnAgent: (agentId, at) => {
-    const id = get().spawnConsole(agentId, at);
+  spawnAgent: (agentId, at, opts) => {
+    const id = get().spawnConsole(agentId, at, opts);
     const recentAgents = [agentId, ...get().recentAgents.filter((a) => a !== agentId)].slice(0, 3);
     set({ selection: [id], recentAgents });
     void settingsSet({ recentAgents });
@@ -318,6 +318,7 @@ export const makeBoardStore = () => create<BoardState>((set, get) => {
       id, kind: "console", ...spot, w: CONSOLE_W, h: CONSOLE_H, z,
       name: nextName(list.filter(isConsole).map((n) => n.name)),
       agentId, textSize: opts?.textSize ?? null, yolo: false,
+      ...(opts?.cwd ? { cwd: opts.cwd } : {}),
       ...(profile && (agentId === "claude" || agentId === "codex") ? { profile } : {}),
     };
     set((s) => ({ nodes: { ...s.nodes, [id]: fix(node) } }));

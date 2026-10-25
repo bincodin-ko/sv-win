@@ -5,6 +5,7 @@ import type { Group } from "./groups";
 import type { View } from "./viewport";
 import { showNotice } from "../lib/notice";
 import { t } from "../i18n";
+import { isHub } from "../shell/hubPath";
 
 export const FORMAT_VERSION = 1;
 export const SAVED_BY = "symvibe-win";
@@ -12,7 +13,7 @@ export const READONLY_BANNER = "이 보드는 더 새 버전에서 저장돼 변
 
 export type WorkspaceInfo = { id: string; name: string; repoPath: string };
 export type RepoInfo = { path: string; name: string; workspaces: { id: string; name: string }[] };
-export type Repos = { repos: RepoInfo[]; lastRepo: string | null; lastWorkspace?: Record<string, string> };
+export type Repos = { repos: RepoInfo[]; lastRepo: string | null; lastWorkspace?: Record<string, string>; hubs?: { id: string; name: string }[] };
 export type LoadResult = { json: string | null; source: "main" | "prev" | "empty"; archived: boolean };
 
 // 프로세스·스크롤백 필드는 파일에 넣지도, 불러오지도 않는다 (S-109, S-201)
@@ -181,7 +182,9 @@ export async function openRepoWs(io: StartIo, path: string): Promise<WorkspaceIn
 /** 앱 시작 흐름 (S-324): 설정 reopenLastRepo 가 켜져 있고 lastRepo 폴더가 있으면 그 보드, 아니면 홈. 선택창은 띄우지 않는다 */
 export async function startWorkspace(io: StartIo, opts: { reopenLastRepo: boolean }): Promise<StartResult> {
   if (!opts.reopenLastRepo) return { kind: "home" };
-  const { lastRepo } = await io.reposGet();
+  const { lastRepo, hubs } = await io.reposGet();
+  const hub = isHub(lastRepo) ? hubs?.find((h) => `hub:${h.id}` === lastRepo) : undefined; // H5 S-2874: Hub 는 폴더 확인 없이 hubs 에 있으면 연다
+  if (isHub(lastRepo)) return hub ? { kind: "board", ws: { id: hub.id, name: hub.name, repoPath: lastRepo! } } : { kind: "home" };
   const ws = lastRepo ? await openRepoWs(io, lastRepo) : null;
   return ws ? { kind: "board", ws } : { kind: "home" };
 }

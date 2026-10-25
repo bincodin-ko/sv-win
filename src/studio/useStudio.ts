@@ -4,6 +4,7 @@ import { LATER_TEXT } from "../commandbar/answers";
 import { mk, useThread } from "../commandbar/thread";
 import { t } from "../i18n";
 import { setStudioRoot } from "../lib/ipc";
+import { isHub } from "../shell/hubPath";
 import { useShell } from "../shell/useShell";
 import { useUi } from "../ui/useUi";
 import { getStudio, type StudioId } from "./registry";
@@ -14,7 +15,8 @@ export const NEED_REPO = "Open a repo first.";
 /** null = 열렸다, 문자열 = 열지 못한 이유(명령 답으로 쓴다) */
 export async function requestOpenStudio(id: StudioId, arg?: string): Promise<string | null> {
   if (!getStudio(id)) return t(LATER_TEXT);
-  if (id !== "skills" && !useShell.getState().activeRepo) return NEED_REPO; // Skills 는 repo 없이도(Personal 만)
+  const repo = useShell.getState().activeRepo;
+  if (id !== "skills" && (!repo || isHub(repo))) return NEED_REPO; // Skills 는 repo 없이도(Personal 만). Hub(hub:<id>)는 폴더가 아니라 뿌리가 될 수 없다
   if (useUi.getState().studio.open && !(await confirmUnsaved())) return "Cancelled.";
   setStudioRoot(useShell.getState().activeRepo ?? "");
   useUi.getState().openStudio(id, arg);

@@ -25,7 +25,7 @@ pub fn claude_transcript_exists_in(repo: &str, session_id: &str, claude_dir: &Pa
 }
 
 /// Windows 경로 비교용: 소문자, '/'→'\', 끝 구분자 제거
-fn norm(p: &str) -> String {
+pub(crate) fn norm(p: &str) -> String {
     p.to_lowercase().replace('/', "\\").trim_end_matches('\\').to_string()
 }
 
@@ -40,7 +40,7 @@ pub(crate) fn subdirs(p: &Path) -> Vec<PathBuf> {
 }
 
 /// 첫 줄 session_meta 의 (id, cwd). 옛 형식(payload 없이 최상위)도 받는다.
-fn meta(p: &Path) -> Option<(String, String)> {
+pub(crate) fn meta(p: &Path) -> Option<(String, String)> {
     let mut line = String::new();
     BufReader::new(fs::File::open(p).ok()?).read_line(&mut line).ok()?;
     let v: serde_json::Value = serde_json::from_str(&line).ok()?;
@@ -81,7 +81,7 @@ pub(crate) fn home() -> Option<PathBuf> {
 }
 
 #[tauri::command]
-pub fn claude_transcript_exists_cmd(repo: String, session_id: String, config_dir: Option<String>) -> bool {
+pub async fn claude_transcript_exists_cmd(repo: String, session_id: String, config_dir: Option<String>) -> bool {
     match config_dir {
         Some(d) => claude_transcript_exists_in(&repo, &session_id, &PathBuf::from(d)),
         None => home().is_some_and(|h| claude_transcript_exists(&repo, &session_id, &h)),
@@ -89,7 +89,7 @@ pub fn claude_transcript_exists_cmd(repo: String, session_id: String, config_dir
 }
 
 #[tauri::command]
-pub fn codex_find_session_cmd(repo: String, started_after_ms: u64, claimed: Vec<String>, config_dir: Option<String>) -> Option<String> {
+pub async fn codex_find_session_cmd(repo: String, started_after_ms: u64, claimed: Vec<String>, config_dir: Option<String>) -> Option<String> {
     let ch = config_dir.map(PathBuf::from).or_else(|| std::env::var_os("CODEX_HOME").map(PathBuf::from)).or_else(|| home().map(|h| h.join(".codex")))?;
     codex_find_session(&repo, started_after_ms, &claimed, &ch)
 }

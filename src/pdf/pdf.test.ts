@@ -26,12 +26,21 @@ describe("표지 (S-1841)", () => {
 
 describe("목차 (S-1842)", () => {
   it("제목 2개면 없다", () => expect(html({ md: heads(2) })).not.toContain("Contents"));
-  it("제목 3개면 Contents 와 안쪽 링크, 쪽 번호 없음", () => {
+  it("제목 3개면 Contents 와 안쪽 링크, 쪽 번호 자리표시자 (S-3185)", () => {
     const h = html({ md: heads(3) });
     expect(h).toContain("Contents");
     expect((h.match(/<a href="#h-\d+">Head \d<\/a>/g) ?? []).length).toBe(3);
     expect(h).toMatch(/id="h-0"/);
+    for (const k of [0, 1, 2]) expect(h).toContain(`<a href="#h-${k}">Head ${k + 1}</a><span class="pg" data-pg="h-${k}">000</span></li>`);
   });
+  it("목차 CSS: flex 줄·점선·쪽 번호 칸·채우기 전 숨김 (S-3185)", () => {
+    const h = html({ md: heads(3) });
+    expect(h).toMatch(/\.toc li\s*\{[^}]*display:\s*flex/);
+    expect(h).toContain("1px dotted #c0c4c8");
+    expect(h).toMatch(/\.pg\s*\{[^}]*tabular-nums[^}]*min-width:\s*3ch[^}]*text-align:\s*right/);
+    expect(h).toMatch(/\.pg\[data-pg\]\s*\{\s*visibility:\s*hidden/);
+  });
+  it("목차가 없으면 자리표시자도 없다 (한 번 인쇄)", () => expect(html({ md: heads(2) })).not.toContain("data-pg="));
   it("h4 이하는 세지 않는다", () => expect(html({ md: "#### a\n\n#### b\n\n#### c\n\n##### d" })).not.toContain("Contents"));
 });
 

@@ -5,12 +5,46 @@ import { fsReveal, voiceFolder } from "../../lib/ipc";
 import { DICT_KEYS, DICT_NAME, dictKey } from "../../voice/dictate";
 import { LANGUAGES, languageLabel } from "../../voice/languages";
 import { listInputs, micState, requestMic, type MicInput } from "../../voice/mic";
+import { cancelPiper, piperLine, refreshPiper, startPiper, usePiper, type PiperLang } from "../../voice/piper";
 import { hasLocalVoice, pickVoice, speak } from "../../voice/speak";
 import { refreshVoice, retry, startAndWait, useVoice } from "../../voice/status";
 import { useSettings } from "../useSettings";
 import { recogButton, recogLabel } from "./voiceLabels";
 
 const row: React.CSSProperties = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 };
+
+/** Q1 S-3101·S-3108: 화면 언어(ko/en) 하나의 Piper 상태·단추·모델 라이선스·마지막 실패 */
+function PiperRows({ lang }: { lang: PiperLang }) {
+  const t = useT();
+  const status = usePiper((x) => x.status);
+  const busy = usePiper((x) => x.busy);
+  const fail = usePiper((x) => x.lastPiperFail);
+  useEffect(() => void refreshPiper().catch(() => {}), []);
+  const line = status ? piperLine(status, lang) : { kind: "none" as const, pct: undefined, why: undefined };
+  const kind = busy && line.kind === "none" ? "downloading" : line.kind; // 파일 사이 틈
+  useEffect(() => {
+    if (kind !== "downloading" || busy) return; // 순서가 도는 중이면 그쪽이 읽는다. 창을 다시 열었을 때만 직접 읽음
+    const i = setInterval(() => void refreshPiper().catch(() => {}), 500);
+    return () => clearInterval(i);
+  }, [kind, busy]);
+  const label = kind === "ready" ? t("Ready") : kind === "downloading" ? t("Downloading… {pct}%", { pct: line.pct ?? 0 }) : kind === "failed" ? t("Failed: {why}", { why: line.why ?? t("unknown") }) : t("Not downloaded");
+  const small: React.CSSProperties = { color: "var(--mute)", fontSize: 12 };
+  return (
+    <div style={{ display: "grid", gap: 6, paddingLeft: 24 }}>
+      <div style={row}>
+        <span data-testid="voice-piper-state" style={{ color: "var(--text-dim)" }}>{label}</span>
+        <span style={{ display: "flex", gap: 8 }}>
+          {kind === "none" && <button data-testid="voice-piper-dl" onClick={() => void startPiper(lang)}>{t("Download Piper voice (~85 MB)")}</button>}
+          {kind === "downloading" && <button data-testid="voice-piper-cancel" onClick={() => void cancelPiper(lang)}>{t("Cancel")}</button>}
+          {kind === "failed" && <button data-testid="voice-piper-retry" onClick={() => void startPiper(lang)}>{t("Retry")}</button>}
+          {kind === "ready" && <button data-testid="voice-piper-test" onClick={() => speak(t("This is the voice I'll use."))}>{t("Test")}</button>}
+        </span>
+      </div>
+      <span data-testid="voice-piper-license" style={small}>{lang === "ko" ? t("Korean voice: KSS dataset, CC BY-NC-SA 4.0 (non-commercial)") : t("English voice: LJ Speech, public domain")}</span>
+      {fail && <span data-testid="voice-piper-fail" style={small}>{t("Last Piper try failed: {reason} — used the Windows voice", { reason: fail })}</span>}
+    </div>
+  );
+}
 
 export default function Voice() {
   const t = useT();
@@ -22,6 +56,7 @@ export default function Voice() {
   const [voices, setVoices] = useState<string[]>([]);
   const patch = useSettings.getState().patch;
   const model = s.speechModel === "base" ? "base" : "small";
+  const engine = s.ttsEngine === "piper" ? "piper" : "windows"; // 12묶음 Q1: 키는 읽는 곳에서 기본값(useSettings 기본 목록엔 없음)
   const loadInputs = () => void Promise.all([listInputs(), micState()]).then(([l, st]) => (setInputs(l), setAllowed(st === "granted")));
   useEffect(() => {
     loadInputs();
@@ -76,7 +111,14 @@ export default function Voice() {
       </label>
       <span style={{ color: "var(--mute)", fontSize: 12 }}>{t("On some Korean keyboards Right Ctrl and Right Alt are the Hanja/Han-Eng keys and may not work.")}</span>
       {check("speakReplies", t("Confirm commands out loud"), "voice-speak")}
-      {s.speakReplies !== false && (hasLocalVoice(lang) ? (
+      <label style={row}>{t("Speaking engine")}
+        <select data-testid="voice-tts-engine" value={engine} onChange={(e) => patch({ ttsEngine: e.target.value })}>
+          <option value="windows">{t("Windows built-in")}</option>
+          <option value="piper">{t("Piper (natural, offline)")}</option>
+        </select>
+      </label>
+      {engine === "piper" && s.speakReplies !== false && <PiperRows lang={lang} />}
+      {engine === "windows" && s.speakReplies !== false && (hasLocalVoice(lang) ? (
         <div style={{ ...row, paddingLeft: 24 }}>
           <select data-testid="voice-voice" value={String(s.voiceName ?? "auto")} onChange={(e) => patch({ voiceName: e.target.value })}>
             <option value="auto">{t("Automatic voice")}</option>

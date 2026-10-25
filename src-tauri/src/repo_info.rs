@@ -22,7 +22,7 @@ pub fn branch_of(dir: &Path) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn repo_branch(path: String) -> Option<String> {
+pub async fn repo_branch(path: String) -> Option<String> {
     branch_of(Path::new(&path))
 }
 

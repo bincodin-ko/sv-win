@@ -1,6 +1,7 @@
 // S-1060~S-1062: 명령줄 git. C9 actions 를 부르고 결과를 답 한 줄로 바꾼다. 패널이 닫혀 있어도 되도록 먼저 상태를 읽는다.
 import { commitOnly, commitPush, pullOnly, pushOnly } from "../git/actions";
 import { t, tp } from "../i18n";
+import { isHub } from "../shell/hubPath";
 import { DIVERGED, checkedOf, repoOf, useGit } from "../git/useGit";
 
 export const NO_REPO = "There's no git repository open.";
@@ -19,6 +20,7 @@ const firstLine = (s: string) => s.split("\n")[0]!.trim();
 
 export async function runGitOp(repo: string, op: GitOp, message?: string): Promise<string> {
   if (!repo) return t("There's no git repository open.");
+  if (isHub(repo)) return t("This board has no folder, so git isn't available"); // H5 S-2878
   await useGit.getState().refresh(repo);
   const r0 = repoOf(useGit.getState().by, repo);
   if (!r0.st || (!r0.st.ok && r0.st.notGit)) return t("There's no git repository open.");

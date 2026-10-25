@@ -169,12 +169,12 @@ pub fn home_dirs_of(home: &str) -> HomeDirs {
 }
 
 #[tauri::command]
-pub fn home_dirs() -> HomeDirs {
+pub async fn home_dirs() -> HomeDirs {
     home_dirs_of(&std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default())
 }
 
 #[tauri::command]
-pub fn git_clone(jobs: tauri::State<'_, Jobs>, url: String, dest: String) -> Result<u32, String> {
+pub async fn git_clone(jobs: tauri::State<'_, Jobs>, url: String, dest: String) -> Result<u32, String> {
     jobs.start_git_clone(&url, Path::new(&dest))
 }
 
@@ -189,12 +189,12 @@ pub fn git_cancel(jobs: tauri::State<'_, Jobs>, job: u32) -> bool {
 }
 
 #[tauri::command]
-pub fn git_init(path: String, branch_main: bool) -> Result<(), String> {
+pub async fn git_init(path: String, branch_main: bool) -> Result<(), String> {
     init_repo(Path::new(&path), branch_main)
 }
 
 #[tauri::command]
-pub fn git_init_here(path: String, branch_main: bool) -> Result<(), String> {
+pub async fn git_init_here(path: String, branch_main: bool) -> Result<(), String> {
     init_repo_here(Path::new(&path), branch_main)
 }
 

@@ -1,5 +1,7 @@
+pub mod agent_logs;
 pub mod agents;
 pub mod boards;
+pub mod conversations;
 pub mod custom_agents;
 pub mod diagram;
 pub mod fs;
@@ -22,19 +24,23 @@ pub mod suspend;
 pub mod threads;
 pub mod studio;
 pub mod skills;
+pub mod subagents;
 pub mod web;
 pub mod tokens;
 pub mod transcripts;
 pub mod settings;
 pub mod voice;
+pub mod secrets; // 13묶음 R1
+pub mod planner_api;
 
 use pty::PtyManager;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::State;
 
+// async: 동기 명령은 메인(UI) 스레드에서 돈다. ConPTY+프로세스 생성이 콘솔마다 UI를 멈춰 preset 으로 여러 개 열면 버벅였다
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-fn pty_spawn(
+async fn pty_spawn(
     state: State<'_, PtyManager>,
     program: Option<String>,
     args: Option<Vec<String>>,
@@ -63,32 +69,33 @@ fn pty_spawn(
 }
 
 #[tauri::command]
-fn pty_write(state: State<'_, PtyManager>, id: u32, data: String) -> Result<(), String> {
+async fn pty_write(state: State<'_, PtyManager>, id: u32, data: String) -> Result<(), String> {
     state.write(id, data.as_bytes())
 }
 
 #[tauri::command]
-fn pty_set_batch(state: State<'_, PtyManager>, id: u32, low_spec: bool, visible: bool) {
-    state.set_batch(id, low_spec, visible)
+async fn pty_set_batch(state: State<'_, PtyManager>, id: u32, low_spec: bool, visible: bool) -> Result<(), String> {
+    state.set_batch(id, low_spec, visible);
+    Ok(())
 }
 
 #[tauri::command]
-fn pty_resize(state: State<'_, PtyManager>, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+async fn pty_resize(state: State<'_, PtyManager>, id: u32, cols: u16, rows: u16) -> Result<(), String> {
     state.resize(id, cols, rows)
 }
 
 #[tauri::command]
-fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
+async fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
     state.kill(id)
 }
 
 #[tauri::command]
-fn pty_pause(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
+async fn pty_pause(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
     state.pause(id)
 }
 
 #[tauri::command]
-fn pty_resume(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
+async fn pty_resume(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
     state.resume(id)
 }
 
@@ -165,6 +172,7 @@ pub fn run() {
         .manage(livestatus::cmds::LiveState::default())
         .manage(repo_setup::Jobs::default())
         .manage(voice::Voice::default())
+        .manage(planner_api::PlannerApi::default())
         .setup(|app| {
             // S-169: 시작 때 에이전트 설치 여부를 한 번 찾아 둔다
             use tauri::Manager;
@@ -205,6 +213,7 @@ pub fn run() {
             tokens::tokens_cancel,
             settings::settings_get,
             settings::usage_probe_dir,
+            settings::planner_dir,
             settings::settings_set,
             boards::board_load,
             boards::board_save,
@@ -212,6 +221,7 @@ pub fn run() {
             boards::repos_get,
             boards::repos_set,
             boards::dir_exists,
+            conversations::conversations_list,
             resume::claude_transcript_exists_cmd,
             resume::codex_find_session_cmd,
             lifecycle::app_quit,
@@ -269,6 +279,15 @@ pub fn run() {
             git::cmds::git_log,
             git::cmds::git_status,
             transcripts::last_reply_cmd,
+            agent_logs::agent_find_session,
+            secrets::planner_key_set,
+            secrets::planner_key_has,
+            secrets::planner_key_clear,
+            planner_api::planner_api_ask,
+            planner_api::planner_api_models,
+            planner_api::planner_api_cancel,
+
+            subagents::claude_subagents_cmd,
             transcripts::outputs_save_cmd,
             fs::file_read,
             fs::file_stat,
@@ -306,7 +325,9 @@ pub fn run() {
             voice::voice_download,
             voice::voice_cancel,
             voice::voice_folder,
-            voice::voice_transcribe
+            voice::voice_transcribe,
+            voice::piper::piper_status,
+            voice::piper::piper_speak
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 실행 실패");

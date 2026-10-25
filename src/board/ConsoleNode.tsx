@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import AgentPicker from "../console/AgentPicker";
-import { getRepoPath } from "../console/offers";
+import { consoleCwd, getRepoPath, sameFolder } from "../console/offers";
 import ResumeBanner from "../console/ResumeBanner";
 import { editName } from "../console/names";
 import { createSession, requestClose, requestRestart, type Session } from "../console/session";
@@ -8,6 +8,8 @@ import type { Status } from "../console/status";
 import { shouldOffer } from "../output/reply";
 import { setReply, useOutputs } from "../output/useOutputs";
 import { sessionKey } from "../console/sessionKey";
+import { toggleMax, useMax } from "../console/maximize";
+import { toggleSession } from "../console/pause";
 import { useUi } from "../ui/useUi";
 import { createTerminal, type TermHandle } from "../terminal/TerminalView";
 import { useScope } from "./BoardScope";
@@ -16,6 +18,8 @@ import { GAP } from "./placement";
 import { useSettings } from "../settings/useSettings";
 import { useLive } from "../livestatus/useLive";
 import { useT } from "../i18n";
+import { homeDirs } from "../lib/ipc";
+import { isHubWs } from "../shell/useShell";
 import { isImeEvent } from "../commandbar/ime";
 import { statusLabel } from "./statusLabel";
 import { initials } from "../profiles/profiles";
@@ -39,6 +43,9 @@ const handleStyle = (h: string): React.CSSProperties => {
 };
 const iconBtn: React.CSSProperties = { background: "none", border: 0, color: "var(--fg-4)", cursor: "pointer", padding: "2px 6px", font: "13px system-ui" };
 
+let homeP: Promise<string> | undefined;
+const hubHome = () => (homeP ??= homeDirs().then((d) => d.home)); // homeDirs() 는 한 번만
+
 function ConsoleNode({ id }: { id: string }) {
   bump("ConsoleNode");
   const low = useLowSpec(); // 저사양: 흐린 그림자 끔(줌마다 다시 래스터하는 비용)
@@ -52,6 +59,7 @@ function ConsoleNode({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("STARTING");
   const [picker, setPicker] = useState(false);
   const [editing, setEditing] = useState(false);
+  const maxed = useMax((s) => s.key === sessionKey(wsId, id)); // 1-4: 크게 보기(Board 가 노드 래퍼 스타일을 바꾼다 — 이 컴포넌트는 그대로)
   const detail = useLive((s) => s.detail[sessionKey(wsId, id)]); // B16 S-687: hook 이 알려 준 하는 일
   const reply = useOutputs((s) => s.replies[sessionKey(wsId, id)]); // B15 S-660
   const prevStatus = useRef<Status>("STARTING");
@@ -68,8 +76,17 @@ function ConsoleNode({ id }: { id: string }) {
     const n = useBoard.getState().nodes[id];
     const t = createTerminal(el);
     term.current = t;
-    session.current = createSession({ nodeId: id, term: t.term, agentId: isConsole(n) ? n.agentId : "shell", cwd: getRepoPath(wsId), onStatus: setStatus, wsId, store: useBoard });
+    const start = (cwd?: string) => void (session.current = createSession({ nodeId: id, term: t.term, agentId: isConsole(n) ? n.agentId : "shell", cwd, onStatus: setStatus, wsId, store: useBoard }));
+    let live = true;
+    const cwd = consoleCwd(wsId, n);
+    if (cwd || !isHubWs(wsId)) start(cwd);
+    else void hubHome().then((home) => { // H5 S-2875: Hub 의 콘솔은 cwd 없이 놓이면 첫 시작 전에 홈 폴더를 박아 저장한다
+      if (!live) return;
+      useBoard.getState().updateNode(id, { cwd: home });
+      start(home);
+    });
     return () => {
+      live = false;
       session.current?.dispose();
       t.dispose();
       session.current = term.current = null;
@@ -142,11 +159,12 @@ function ConsoleNode({ id }: { id: string }) {
     setEditing(false);
   };
 
-  const duplicate = () => useBoard.getState().spawnConsole(node.agentId, { x: node.x + node.w + GAP, y: node.y }, { textSize: node.textSize, profile: node.profile }); // S-067: 기준점 = 원본 오른쪽
+  const duplicate = () => useBoard.getState().spawnConsole(node.agentId, { x: node.x + node.w + GAP, y: node.y }, { textSize: node.textSize, profile: node.profile, cwd: node.cwd }); // S-067: 기준점 = 원본 오른쪽
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--well)", border: "1px solid var(--bd)", borderRadius: 10, boxShadow: low ? "none" : "0 6px 24px var(--scrim-50)", font: "12px system-ui", color: "var(--fg-2)" }} data-testid="console">
-      <div data-node-handle style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px", borderBottom: "1px solid var(--surface-2)", flex: "none", userSelect: "none", position: "relative" }}>
+      <div data-node-handle style={{ display: "flex", alignItems: "center", gap: 8, height: 32, padding: "0 8px", borderBottom: "1px solid var(--surface-2)", flex: "none", userSelect: "none", position: "relative" }}
+        onDoubleClick={(e) => { if ((e.target as Element).closest("button, input")) return; e.stopPropagation(); toggleMax(sessionKey(wsId, id)); }}>
         <button data-testid="console-badge" title={node.agentId} onClick={() => setPicker((p) => !p)}
           style={{ position: "relative", width: 20, height: 20, borderRadius: 6, border: 0, background: "var(--chip)", color: "var(--on-fill)", font: "600 11px system-ui", cursor: "pointer" }}>
           {node.agentId.charAt(0).toUpperCase()}
@@ -167,12 +185,18 @@ function ConsoleNode({ id }: { id: string }) {
             onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}>{node.name}</span>
         )}
         {node.yolo && <span data-testid="console-yolo" style={{ background: "var(--danger-2)", color: "var(--on-fill)", borderRadius: 4, padding: "0 5px", font: "700 10px system-ui" }}>YOLO</span>}
+        {node.cwd && !sameFolder(node.cwd, getRepoPath(wsId) ?? "") && (
+          <span data-testid="console-folder" title={t("Folder: {path}", { path: node.cwd })} style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--mute)", font: "11px system-ui" }}>📁 {node.cwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop()}</span>
+        )}
         <span style={{ flex: 1 }} />
         {reply && shouldOffer(reply) && status !== "WORKING" && (
           <button data-testid="console-output" title={t("See output")} aria-label={t("See output")} style={iconBtn}
             onClick={() => useUi.setState({ outputViewer: { open: true, nodeId: id, wsId } })}>▤</button>
         )}
-        <span data-testid="console-status" data-status={status} title={status === "PAUSED" ? t("Paused") : detail} style={{ background: PILL[status], color: PILL_FG[status], borderRadius: 999, padding: "1px 8px", font: "600 10px system-ui", letterSpacing: ".04em" }}>{statusLabel(status)}</span>
+        <button type="button" data-testid="console-status" data-status={status} aria-pressed={status === "PAUSED"} title={status !== "PAUSED" && detail ? `${t("Click to pause/resume")} · ${detail}` : t("Click to pause/resume")}
+          onClick={() => session.current && toggleSession(session.current)} // 1-6: 그 콘솔만 일시정지/재개(Enter·Space 는 button 기본)
+          style={{ border: 0, cursor: "pointer", background: PILL[status], color: PILL_FG[status], borderRadius: 999, padding: "1px 8px", font: "600 10px system-ui", letterSpacing: ".04em" }}>{statusLabel(status)}</button>
+        <button data-testid="console-maximize" title={maxed ? t("Restore") : t("Maximize")} aria-label={maxed ? t("Restore") : t("Maximize")} style={iconBtn} onClick={() => toggleMax(sessionKey(wsId, id))}>{maxed ? "⤡" : "⤢"}</button>
         <button data-testid="console-restart" title={t("Restart")} aria-label={t("Restart")} style={iconBtn} onClick={() => void requestRestart(id, undefined, sc)}>↻</button>
         <button data-testid="console-duplicate" title={t("Duplicate")} aria-label={t("Duplicate")} style={iconBtn} onClick={duplicate}>⧉</button>
         <button data-testid="console-close" title={t("Close")} aria-label={t("Close")} style={iconBtn} onClick={() => void requestClose([id], sc)}>✕</button>
@@ -180,7 +204,7 @@ function ConsoleNode({ id }: { id: string }) {
       <ResumeBanner id={id} />
       <div ref={body} data-wheel-own style={{ flex: 1, minHeight: 0, overflow: "hidden", borderRadius: "0 0 10px 10px" }}
         onDoubleClick={() => term.current?.term.focus()} />
-      {HANDLES.map((h) => <div key={h} data-handle={h} style={handleStyle(h)} onPointerDown={startResize(h)} />)}
+      {!maxed && HANDLES.map((h) => <div key={h} data-handle={h} style={handleStyle(h)} onPointerDown={startResize(h)} />)}
     </div>
   );
 }

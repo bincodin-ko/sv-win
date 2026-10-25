@@ -4,8 +4,8 @@ import type { AskCtl } from "./ask";
 import type { Proposal } from "./parseFacts";
 import type { Quality } from "./prompts";
 
-export type ScanAgent = { id: "claude" | "codex"; label: string; name: string };
-export type ScanError = { kind: "blocked" | "other"; text: string; agent?: string };
+export type ScanAgent = { id: string; label: string; name: string; why?: string }; // why = 못 읽는 CLI(회색 + 이유)
+export type ScanError = { kind: "blocked" | "permission" | "other"; text: string; agent?: string };
 export type Row = Proposal & { dup: boolean; checked: boolean };
 export type Refresh = { factId: string; title: string; status: "running" | "ok" | "changed" | "gone" | "error"; body?: string; text?: string; agent?: string };
 export type ScanState = {

@@ -3,7 +3,8 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { askPasteCheck } from "../console/PasteCheck";
-import { altPlain, joinOneLine, mapKey, pasteLineCount, sanitizePaste } from "./input";
+import { altPlain, imeKeyBlocked, isStrayPaste, joinOneLine, mapKey, pasteLineCount, sanitizePaste } from "./input";
+import { hookIme } from "./ime";
 import { fontSizeFor } from "./textSize";
 import { termTheme, type Mode } from "../theme/palette";
 import { useSettings } from "../settings/useSettings";
@@ -133,6 +134,14 @@ export function createTerminal(el: HTMLElement): TermHandle {
   };
 }
 
+/** 우클릭(button 2) mousedown/mouseup 을 xterm 보다 먼저 잡아 마우스 보고(ESC[<2;..M)가 PTY 로 안 가게 한다. contextmenu 는 막지 않는다(메뉴용). */
+export function guardRightMouse(root: HTMLElement | undefined): () => void {
+  const stop = (e: MouseEvent) => { if (e.button === 2) e.stopPropagation(); };
+  root?.addEventListener("mousedown", stop, true);
+  root?.addEventListener("mouseup", stop, true);
+  return () => { root?.removeEventListener("mousedown", stop, true); root?.removeEventListener("mouseup", stop, true); };
+}
+
 /** S-131·S-133: 콘솔 안 키와 붙여넣기. 돌려주는 함수로 해제한다. */
 function hookInput(term: Terminal): () => void {
   const paste = async (raw: string) => {
@@ -145,6 +154,7 @@ function hookInput(term: Terminal): () => void {
     term.focus();
   };
   term.attachCustomKeyEventHandler((ev) => {
+    if (ev.type === "keydown" && imeKeyBlocked(ev)) return false; // 조합 중 키는 xterm 이 또 보내지 않게(확정 글자는 compositionend 한 번)
     // S-374: Alt as Meta 가 꺼져 있으면 Alt+글자를 Esc 접두 없이 보낸다(설정은 그때그때 읽어 켜진 콘솔에도 즉시)
     const plain = altPlain(ev, useSettings.getState().s.altAsMeta !== false);
     if (plain !== null) {
@@ -164,14 +174,24 @@ function hookInput(term: Terminal): () => void {
     return false;
   });
   // 붙여넣기는 xterm 보다 먼저(capture) 받아 정리·질문을 거친다. Ctrl+V·Ctrl+Shift+V·우클릭 붙여넣기 모두 이 이벤트
+  // 1-3: 우클릭은 메뉴만. 우클릭 직후 브라우저가 내는 진짜 paste 는 버린다(메뉴 Paste 는 합성 이벤트, Ctrl+V 는 우클릭 뒤 시간이 지남)
+  term.options.rightClickSelectsWord = false;
+  let rightAt = 0;
+  const onRight = (e: MouseEvent) => { if (e.button === 2 || e.type === "contextmenu") rightAt = Date.now(); };
+  const root = term.element;
+  const unguard = guardRightMouse(root);
+  root?.addEventListener("mousedown", onRight, true);
+  root?.addEventListener("contextmenu", onRight, true);
   const ta = term.textarea;
   const onPaste = (e: ClipboardEvent) => {
     e.preventDefault();
     e.stopImmediatePropagation();
+    if (isStrayPaste(e.isTrusted, Date.now(), rightAt)) return;
     void paste(e.clipboardData?.getData("text/plain") ?? "");
   };
   ta?.addEventListener("paste", onPaste, true);
-  return () => ta?.removeEventListener("paste", onPaste, true);
+  const unIme = ta ? hookIme(ta, (d) => term.input(d, true), () => { const h = (term as unknown as { _core?: { _compositionHelper?: { _isSendingComposition?: boolean } } })._core?._compositionHelper; if (h) h._isSendingComposition = false; }) : () => {}; // 조합 끝 Space 순서(perf-real ⑥)
+  return () => { unguard(); unIme(); ta?.removeEventListener("paste", onPaste, true); root?.removeEventListener("mousedown", onRight, true); root?.removeEventListener("contextmenu", onRight, true); };
 }
 
 /**

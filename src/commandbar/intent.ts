@@ -4,6 +4,8 @@ export type ParseCtx = {
   groups: { id: string; name: string; role: string }[];
   workspaces: { id: string; name: string }[];
   agents: { id: string; name: string; aliases: string[] }[];
+  /** planner 가 켜져 있나 — 켜져 있으면 못 읽은 생성 문장을 콘솔로 보내지 않고 planner 로 */
+  planner?: boolean;
 };
 
 export type Target =
@@ -13,7 +15,7 @@ export type Target =
   | { kind: "cli"; agentId: string };
 
 export type Intent =
-  | { t: "spawn"; n: number; agentId?: string; role?: string }
+  | { t: "spawn"; n: number; agentId?: string; role?: string; name?: string }
   | { t: "makeGroup"; n: number; agentId?: string }
   | { t: "addToGroup"; n: number; groupId: string; agentId?: string }
   | { t: "pause" | "resume"; target: Target }
@@ -26,7 +28,7 @@ export type Intent =
   | { t: "whoFinished" }
   | { t: "help" }
   | { t: "camera"; op: "fitAll" | "zoomIn" | "zoomOut" | "reset" | "goto" | "focusGroup" | "cliLanes"; target?: Target }
-  | { t: "open"; what: "settings" | "presets" | "mission" | "memory" | "loops" | "usage" | "documents" | "code" | "markdown" | "skills" }
+  | { t: "open"; what: "settings" | "presets" | "mission" | "memory" | "loops" | "usage" | "documents" | "code" | "markdown" | "skills" | "conversations" }
   | { t: "addOrchestrator"; groupId?: string; name?: string }
   | { t: "connect"; target: Target; card?: string }
   | { t: "loop"; minutes?: number; text?: string; bad?: "range" | "empty" }

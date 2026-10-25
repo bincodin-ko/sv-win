@@ -245,3 +245,182 @@ fn custom_paths_override() {
     assert_eq!(model_path(&d, &s, "small"), PathBuf::from("D:/m/x.bin"));
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ---- Q1 Piper (S-3103~S-3110). 값은 spec/12묶음.md 고정 핀 표 ----
+use super::piper::{single_codepoint_config, write_converted_config, clip_text, merge, piper_args, piper_speak_with, voice_kinds};
+
+const PIPER_PINS: [(&str, &str, &str, u64, &str); 5] = [
+    ("piper-engine", "piper_windows_amd64.zip", "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip", 22_477_236, "f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea"),
+    ("piper-ko", "ko_KR-kss-medium.onnx", "https://huggingface.co/rhasspy/piper-voices/resolve/5041a7a49ae5b3a0f30e6837769eb03fdbb231bd/ko/ko_KR/kss/medium/ko_KR-kss-medium.onnx", 63_221_984, "624fd774e26895f24bebae1bd9a3379e3394baeade4b584924f83e414096e2c9"),
+    ("piper-ko-json", "ko_KR-kss-medium.onnx.json", "https://huggingface.co/rhasspy/piper-voices/resolve/5041a7a49ae5b3a0f30e6837769eb03fdbb231bd/ko/ko_KR/kss/medium/ko_KR-kss-medium.onnx.json", 5_232, "153b5619d0580f824a59108d83ca19434de410eb8e4fe80325b58684fdc8a1df"),
+    ("piper-en", "en_US-ljspeech-medium.onnx", "https://huggingface.co/rhasspy/piper-voices/resolve/5041a7a49ae5b3a0f30e6837769eb03fdbb231bd/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx", 63_531_379, "6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22"),
+    ("piper-en-json", "en_US-ljspeech-medium.onnx.json", "https://huggingface.co/rhasspy/piper-voices/resolve/5041a7a49ae5b3a0f30e6837769eb03fdbb231bd/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx.json", 4_972, "141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860"),
+];
+
+#[test]
+fn piper_pins_match_spec_table() {
+    for (k, f, u, b, s) in PIPER_PINS {
+        let p = pin(k).unwrap_or_else(|| panic!("{k} 없음"));
+        assert_eq!((p.file.as_str(), p.url.as_str(), p.bytes, p.sha256.as_str()), (f, u, b, s), "{k}");
+        assert!(url_allowed(&p.url), "{k}");
+        assert_eq!(download_check(&p), Ok(()), "{k}");
+    }
+    assert!(pin("piper-fr").is_none());
+}
+
+#[test]
+fn url_allow_list_piper() {
+    assert!(url_allowed("https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip"));
+    assert!(url_allowed("https://huggingface.co/rhasspy/piper-voices/resolve/abc/ko/x.onnx"));
+    for bad in [
+        "http://github.com/rhasspy/piper/releases/download/x/p.zip",
+        "https://github.com/someone/piper/releases/download/x/p.zip",
+        "https://huggingface.co/other/piper-voices/resolve/abc/x.onnx",
+        "https://github.com/rhasspy/piper-evil/releases/download/x",
+        "https://github.com/rhasspy/piper/issues/1",
+    ] {
+        assert!(!url_allowed(bad), "{bad}");
+    }
+}
+
+#[test]
+fn empty_hash_pin_is_not_available() {
+    let p = target("piper-engine", "p.zip", "https://github.com/rhasspy/piper/releases/download/x/p.zip".into(), 1, "");
+    assert_eq!(download_check(&p), Err("not available".to_string()));
+    let bad = target("piper-ko", "m.onnx", "https://evil.com/m.onnx".into(), 1, HELLO_SHA);
+    assert_eq!(download_check(&bad), Err("url not allowed".to_string()));
+}
+
+#[test]
+fn piper_args_are_assembled() {
+    let a = piper_args(Path::new("M.onnx"), Path::new("M.onnx.json"), Path::new("s-1.wav"));
+    assert_eq!(a, ["--model", "M.onnx", "--config", "M.onnx.json", "--output_file", "s-1.wav"]);
+}
+
+#[test]
+fn piper_text_and_lang_rules() {
+    assert_eq!(clip_text("  hi there \n").unwrap(), "hi there");
+    assert!(clip_text("   ").is_err() && clip_text("").is_err());
+    assert_eq!(clip_text(&"가".repeat(300)).unwrap().chars().count(), 200);
+    assert_eq!(voice_kinds("ko").unwrap(), ("piper-ko", "piper-ko-json"));
+    assert_eq!(voice_kinds("en").unwrap(), ("piper-en", "piper-en-json"));
+    assert!(voice_kinds("fr").is_err() && voice_kinds("").is_err() && voice_kinds("../ko").is_err());
+}
+
+#[test]
+fn piper_voice_part_needs_both_files() {
+    let d = |pct| Part::Downloading { pct };
+    assert_eq!(merge(Part::Ready, Part::Ready), Part::Ready);
+    assert_eq!(merge(Part::Ready, Part::None), Part::None);
+    assert_eq!(merge(Part::None, Part::None), Part::None);
+    assert_eq!(merge(Part::Ready, Part::Failed { why: "x".into() }), Part::Failed { why: "x".into() });
+    assert!(matches!(merge(d(50), Part::None), Part::Downloading { .. }));
+    assert!(matches!(merge(Part::Ready, d(10)), Part::Downloading { .. }));
+}
+
+#[cfg(windows)]
+#[test]
+fn piper_speak_runs_engine_writes_stdin_and_deletes_wav() {
+    let d = tmpdir("ps");
+    let tmp = d.join("tmp");
+    // 인자는 %*, 글은 stdin 첫 줄, 출력 파일은 6번째 인자
+    let exe = write(&d.join("piper.cmd"), "@echo off\r\necho %*> \"%~dp0args.txt\"\r\nset /p L=\r\necho %L%> \"%~dp0stdin.txt\"\r\necho WAVDATA> \"%~6\"\r\n");
+    let (onnx, json) = (write(&d.join("m.onnx"), "m"), write(&d.join("m.onnx.json"), "{}"));
+    let wav = piper_speak_with(&exe, &onnx, &json, &tmp, "hello piper", Duration::from_secs(20)).unwrap();
+    assert!(String::from_utf8_lossy(&wav).contains("WAVDATA"));
+    let args = std::fs::read_to_string(d.join("args.txt")).unwrap();
+    for w in ["--model", "m.onnx", "--config", "m.onnx.json", "--output_file", "s-", ".wav"] {
+        assert!(args.contains(w), "{w} 없음: {args}");
+    }
+    assert_eq!(std::fs::read_to_string(d.join("stdin.txt")).unwrap().trim(), "hello piper");
+    assert_eq!(std::fs::read_dir(&tmp).unwrap().count(), 0, "wav 를 지움");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[cfg(windows)]
+#[test]
+fn piper_speak_timeout_and_failure_delete_wav() {
+    let d = tmpdir("pst");
+    let tmp = d.join("tmp");
+    let (onnx, json) = (write(&d.join("m.onnx"), "m"), write(&d.join("m.onnx.json"), "{}"));
+    let slow = write(&d.join("slow.cmd"), "@echo off\r\nping -n 5 127.0.0.1 >nul\r\n"); // 가드: 4초 뒤 스스로 끝남
+    let t = Instant::now();
+    assert_eq!(piper_speak_with(&slow, &onnx, &json, &tmp, "x", Duration::from_millis(800)), Err("timeout".to_string()));
+    assert!(t.elapsed() < Duration::from_secs(3), "제한 시간에 멈춤");
+    let bad = write(&d.join("bad.cmd"), "@echo off\r\nexit /b 3\r\n");
+    assert_eq!(piper_speak_with(&bad, &onnx, &json, &tmp, "x", Duration::from_secs(10)), Err("engine".to_string()));
+    let none = write(&d.join("none.cmd"), "@echo off\r\n"); // 성공인데 wav 를 안 씀
+    assert!(piper_speak_with(&none, &onnx, &json, &tmp, "x", Duration::from_secs(10)).is_err());
+    assert_eq!(std::fs::read_dir(&tmp).unwrap().count(), 0);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[cfg(windows)]
+#[test]
+fn piper_downloads_go_to_piper_folders() {
+    let d = tmpdir("pdl");
+    // 모델 → Voice/piper/voices/<파일> + .ok
+    let src = write(&d.join("src.bin"), "hello");
+    let v = Voice::default();
+    let p = target("piper-ko", "ko_KR-kss-medium.onnx", file_url(&src), 5, HELLO_SHA);
+    assert_eq!(v.part(&d, &p), Part::None);
+    assert_eq!(v.run_download(&d, &p, Path::new("curl.exe")), Part::Ready);
+    assert_eq!(std::fs::read_to_string(d.join("piper/voices/ko_KR-kss-medium.onnx")).unwrap(), "hello");
+    assert_eq!(std::fs::read_to_string(d.join("piper/voices/ko_KR-kss-medium.onnx.ok")).unwrap().trim(), HELLO_SHA);
+    assert!(!d.join("models").exists(), "whisper 폴더는 건드리지 않음");
+    assert_eq!(v.part(&d, &p), Part::Ready);
+    // 엔진 zip(안에 piper/ 폴더) → Voice/piper/engine/piper/piper.exe
+    let stage = d.join("stage/piper");
+    std::fs::create_dir_all(&stage).unwrap();
+    write(&stage.join("piper.exe"), "exe");
+    write(&stage.join("espeak-ng-data.txt"), "d");
+    let zip = d.join("piper_windows_amd64.zip");
+    assert!(std::process::Command::new("tar").args(["-a", "-cf"]).arg(&zip).arg("-C").arg(d.join("stage")).arg("piper").status().unwrap().success());
+    let (sha, bytes) = (sha256_file(&zip).unwrap(), std::fs::metadata(&zip).unwrap().len());
+    let e = target("piper-engine", "piper_windows_amd64.zip", file_url(&zip), bytes, &sha);
+    assert_eq!(v.run_download(&d, &e, Path::new("curl.exe")), Part::Ready);
+    let exe = find_exe(&d.join("piper/engine")).unwrap();
+    assert!(exe.ends_with("piper.exe") && exe.starts_with(d.join("piper/engine/piper")));
+    assert_eq!(v.part(&d, &e), Part::Ready);
+    assert!(!d.join("engine").exists(), "whisper 엔진 폴더는 건드리지 않음");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn clean_tmp_removes_piper_wavs() {
+    let d = tmpdir("cleanp");
+    std::fs::create_dir_all(d.join("tmp")).unwrap();
+    write(&d.join("tmp/s-4.wav"), "x");
+    clean_tmp(&d);
+    assert_eq!(std::fs::read_dir(d.join("tmp")).unwrap().count(), 0);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn piper_config_drops_only_multi_codepoint_phonemes() {
+    // 2026-10-25 실측: ko_KR-kss-medium.onnx.json 의 여러 글자 키는 aɪ aʊ ɔɪ eɪ oʊ (id 161~165) 5개뿐
+    let src = r#"{"audio":{"sample_rate":22050},"phoneme_id_map":{"_":[0],"a":[14],"aɪ":[161],"aʊ":[162],"ɔɪ":[163],"eɪ":[164],"oʊ":[165]},"num_symbols":256}"#;
+    let out: serde_json::Value = serde_json::from_str(&single_codepoint_config(src).unwrap()).unwrap();
+    let m = out["phoneme_id_map"].as_object().unwrap();
+    assert_eq!(m.len(), 2);
+    assert_eq!(m["a"][0], 14);
+    assert_eq!(out["num_symbols"], 256, "다른 칸은 그대로");
+    assert_eq!(out["audio"]["sample_rate"], 22050);
+}
+
+#[test]
+fn piper_config_bad_input_is_engine_error() {
+    assert!(single_codepoint_config("not json").is_err());
+    assert!(single_codepoint_config("{}").is_err(), "phoneme_id_map 없음");
+}
+
+#[test]
+fn piper_config_file_is_written_apart_from_original() {
+    let d = tmpdir("pcf");
+    let src = write(&d.join("m.onnx.json"), r#"{"phoneme_id_map":{"a":[1],"aɪ":[2]}}"#);
+    let dst = d.join("run").join("m.onnx.json");
+    write_converted_config(&src, &dst).unwrap();
+    assert!(std::fs::read_to_string(&dst).unwrap().contains("\"a\"") && !std::fs::read_to_string(&dst).unwrap().contains("aɪ"));
+    assert!(std::fs::read_to_string(&src).unwrap().contains("aɪ"), "원본은 그대로");
+    let _ = std::fs::remove_dir_all(&d);
+}

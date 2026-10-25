@@ -11,6 +11,8 @@ import { MAX_SLOTS } from "../composer/slots";
 import { spawnTeam } from "../composer/spawnTeam";
 import { pauseAll, pauseSession, resumeAll, resumeSession } from "../console/pause";
 import { getSession, type Session } from "../console/session";
+import { editName } from "../console/names";
+import { requestHistory } from "../board/guardedHistory";
 import { sessionKey } from "../console/sessionKey";
 import { useSettings } from "../settings/useSettings";
 import { useShell } from "../shell/useShell";
@@ -38,6 +40,8 @@ import { fmtDuration, recentOrders, track, type Order, type Snap } from "./repor
 import type { Role } from "./roles";
 import { guard } from "../orchestrator/scope";
 import { mk, useThread } from "./thread";
+import { cancelPlanner, runPlanner } from "../planner/run";
+import { plannerOn } from "../planner/state";
 
 // ---- 세계 읽기: 이 repo 의 열린 워크스페이스들(현재 것 먼저, S-618) ----
 type C = { key: string; wsId: string; id: string; name: string; agentId: string; groupKey?: string; store: BoardStore };
@@ -71,7 +75,7 @@ async function parseCtx(ctx: ExecCtx, cs: C[]): Promise<ParseCtx> {
     (getStore(wsId).getState().groups ?? []).map((g) => ({ id: sessionKey(wsId, g.id), name: groupTitle(g), role: g.role as string })),
   );
   const agents = (await agentsList()).map((a) => ({ id: a.id, name: a.name, aliases: [] as string[] }));
-  return { consoles, groups, workspaces: tabs(ctx).map((w) => ({ id: w.id, name: w.name })), agents };
+  return { consoles, groups, workspaces: tabs(ctx).map((w) => ({ id: w.id, name: w.name })), agents, planner: plannerOn() && useSettings.getState().s.planner !== "off" };
 }
 
 const resolve = (t: Target, cs: C[]): C[] =>
@@ -242,6 +246,13 @@ export async function runIntent(i: Intent, ctx: ExecCtx): Promise<void> {
       const r = grouped
         ? spawnTeam({ name: "", role: (("role" in i && i.role) || "general") as Role, agents }, store)
         : { ...store.getState().spawnMany(agents), clamped: false };
+      if (i.t === "spawn" && i.name) { // planner 가 준 콘솔 이름. 겹치면 " 2" 가 붙는다
+        const used = Object.values(store.getState().nodes).flatMap((n) => (isConsole(n) && !r.ids.includes(n.id) ? [n.name] : []));
+        for (const id of r.ids) {
+          const nm = editName(i.name, used);
+          if (nm) { used.push(nm); store.getState().updateNode(id, { name: nm }); }
+        }
+      }
       const g = r.groupId ? store.getState().groups.find((x) => x.id === r.groupId) : undefined;
       const list = consolesOfAgent(agent, r.ids.length);
       const made = g ? t("Made {group} with {list}.", { group: groupTitle(g), list }) : t("Placed {list}.", { list });
@@ -276,7 +287,7 @@ export async function runIntent(i: Intent, ctx: ExecCtx): Promise<void> {
     case "orderUnrouted": return order(ctx, cs, [], i.text);
     case "broadcast": return order(ctx, cs, [], i.text, true);
     case "cancel": {
-      const n = cancelPending(cs.map((c) => c.key)) + cancelHandoffs(); // S-1688: 기다리는 handoff·forward 도
+      const n = cancelPending(cs.map((c) => c.key)) + cancelHandoffs() + (cancelPlanner() ? 1 : 0); // S-1688: 기다리는 handoff·forward 도
       return say(ctx, n || dropConfirm() ? t("Cancelled.") : t("Nothing to cancel."));
     }
     case "status": return say(ctx, statusText(rowsOf(cs)));
@@ -290,7 +301,7 @@ export async function runIntent(i: Intent, ctx: ExecCtx): Promise<void> {
         return why ? say(ctx, why) : undefined;
       }
       return i.what === "settings" ? openSettings() : i.what === "presets" ? useUi.setState({ presetsOpen: true })
-        : i.what === "mission" ? ui.openMission() : i.what === "memory" ? ui.openMemory() : i.what === "loops" ? ui.openLoops() : ui.openUsage();
+        : i.what === "conversations" ? ui.openConversations() : i.what === "mission" ? ui.openMission() : i.what === "memory" ? ui.openMemory() : i.what === "loops" ? ui.openLoops() : ui.openUsage();
     }
     case "addOrchestrator": return say(ctx, addOrchestratorCmd(i, store));
     case "connect": return say(ctx, connectCmd(i, store, ctx.wsId));
@@ -304,8 +315,8 @@ export async function runIntent(i: Intent, ctx: ExecCtx): Promise<void> {
       tidyBoard({ ...store, getState: () => ({ ...s, selection: [] }) } as unknown as typeof store);
       return say(ctx, t("Tidied the board."));
     }
-    case "undo": return say(ctx, store.getState().undo() ? t("Undone.") : t("Nothing to undo."));
-    case "redo": return say(ctx, store.getState().redo() ? t("Redone.") : t("Nothing to redo."));
+    case "undo": return say(ctx, await requestHistory("undo", { wsId: ctx.wsId, store }) ? t("Undone.") : t("Nothing to undo."));
+    case "redo": return say(ctx, await requestHistory("redo", { wsId: ctx.wsId, store }) ? t("Redone.") : t("Nothing to redo."));
     case "workspace": return workspace(ctx, cs, i);
     case "git": return say(ctx, await runGitOp(ctx.repo, i.op, i.message));
     case "add": addNode(store, i.what, i.text); return say(ctx, i.what === "note" ? t("Added a sticky note.") : i.what === "kanban" ? t("Added a kanban.") : i.what === "calendar" ? t("Added a calendar.") : i.what === "checklist" ? t("Added a checklist.") : t("Added a browser."));
@@ -325,6 +336,19 @@ export async function runIntent(i: Intent, ctx: ExecCtx): Promise<void> {
   }
 }
 
+/** planner 요청에는 설치된 에이전트만(안 깔린 id 수십 개를 싣지 않는다) */
+export const onlyInstalled = (agents: ParseCtx["agents"], infos: { id: string; installed: boolean }[]): ParseCtx["agents"] => {
+  const ok = new Set(infos.filter((x) => x.installed).map((x) => x.id));
+  return agents.filter((a) => ok.has(a.id));
+};
+
+/** planner 에 줄 보드: parseCtx 에 콘솔 상태를 더한다(손잡이 순서는 parseCtx 와 같다) */
+async function plannerBoard(ctx: ExecCtx) {
+  const cs = consolesOf(ctx, false);
+  const p = await parseCtx(ctx, cs);
+  return { ...p, agents: onlyInstalled(p.agents, await agentsList()), consoles: p.consoles.map((c) => ({ ...c, status: sessOf(cs.find((x) => x.key === c.id)!)?.status() })) };
+}
+
 /** B9 submit 이 부른다: 확인 대기부터 보고, 아니면 해석해서 실행 */
 export async function execute(text: string, ctx: ExecCtx): Promise<void> {
   const a = answerConfirm(ctx.repo, text);
@@ -334,6 +358,7 @@ export async function execute(text: string, ctx: ExecCtx): Promise<void> {
     if (isNo(text)) return;
   }
   const intent = parse(text, await parseCtx(ctx, consolesOf(ctx, false))); // 이름은 범위 밖 것도 알아야 "연결 안 됨" 답을 준다
+  if (intent.t === "needsPlanner" && (await runPlanner(text, ctx, { runIntent, board: () => plannerBoard(ctx), say: (x) => say(ctx, x), note: (x) => note(ctx, x) }))) return; // 11묶음 P2
   const blocked = ctx.scope && guard(intent, ctx.scope);
   if (blocked) return say(ctx, blocked);
   await runIntent(intent, ctx);

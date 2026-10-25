@@ -147,27 +147,27 @@ pub fn root(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn profile_list(app: tauri::AppHandle) -> Result<Vec<Profile>, String> {
+pub async fn profile_list(app: tauri::AppHandle) -> Result<Vec<Profile>, String> {
     Ok(profile_list_in(&root(&app)?))
 }
 #[tauri::command]
-pub fn profile_create(app: tauri::AppHandle, agent: String, name: String) -> Result<Profile, String> {
+pub async fn profile_create(app: tauri::AppHandle, agent: String, name: String) -> Result<Profile, String> {
     profile_create_in(&root(&app)?, &agent, &name, &crate::boards::now_stamp())
 }
 #[tauri::command]
-pub fn profile_env(app: tauri::AppHandle, agent: String, id: String) -> Result<(String, String), String> {
+pub async fn profile_env(app: tauri::AppHandle, agent: String, id: String) -> Result<(String, String), String> {
     profile_env_in(&root(&app)?, &agent, &id)
 }
 #[tauri::command]
-pub fn profile_remove(app: tauri::AppHandle, agent: String, id: String) -> Result<(), String> {
-    profile_remove_in(&root(&app)?, &agent, &id, &|p| crate::fs::trash_move(p.to_string_lossy().into_owned()))
+pub async fn profile_remove(app: tauri::AppHandle, agent: String, id: String) -> Result<(), String> {
+    profile_remove_in(&root(&app)?, &agent, &id, &|p| crate::fs::trash_move_sync(p.to_string_lossy().into_owned()))
 }
 #[tauri::command]
-pub fn profile_status(app: tauri::AppHandle, agent: String, id: String) -> Result<bool, String> {
+pub async fn profile_status(app: tauri::AppHandle, agent: String, id: String) -> Result<bool, String> {
     Ok(profile_status_in(&root(&app)?, &agent, &id))
 }
 #[tauri::command]
-pub fn profile_rename(app: tauri::AppHandle, agent: String, id: String, name: String) -> Result<Profile, String> {
+pub async fn profile_rename(app: tauri::AppHandle, agent: String, id: String, name: String) -> Result<Profile, String> {
     profile_rename_in(&root(&app)?, &agent, &id, &name)
 }
 

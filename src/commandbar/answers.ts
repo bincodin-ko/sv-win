@@ -53,6 +53,7 @@ const HELP_LINES = [
   tm("• open documents · open code · open markdown · open skills"),
   tm("• every 10 minutes run the tests · every hour check the build"),
   tm("• pass this task to codex · when group 1 finishes pass everything to group 2"),
+  tm("• anything else — the planner reads it (Settings > Planner)"),
 ];
 /** 영어 기본 문구(시험이 읽는다). 화면에는 helpText() */
 export const HELP_TEXT = HELP_LINES.join("\n");

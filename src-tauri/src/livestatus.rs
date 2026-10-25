@@ -358,7 +358,7 @@ pub mod cmds {
 
     /// 켜기 전 안내에 보일 파일 경로
     #[tauri::command]
-    pub fn live_status_paths() -> PathInfo {
+    pub async fn live_status_paths() -> PathInfo {
         let p = real_paths();
         let s = |x: &Path| x.to_string_lossy().into_owned();
         PathInfo { claude: s(&p.claude), codex: s(&p.codex), script: s(&p.script) }
@@ -366,7 +366,7 @@ pub mod cmds {
 
     /// 설정은 안 건드리고 수신기만 연다(앱 시작 때 이미 켜져 있던 경우)
     #[tauri::command]
-    pub fn live_status_url(app: AppHandle, st: State<'_, LiveState>) -> Result<String, String> {
+    pub async fn live_status_url(app: AppHandle, st: State<'_, LiveState>) -> Result<String, String> {
         ensure(&app, &st)
     }
 
@@ -378,7 +378,7 @@ pub mod cmds {
 
     /// 두 설정 파일(과 저장된 프로필 폴더들)에 항목을 더하고 수신기를 연다
     #[tauri::command]
-    pub fn live_status_enable(app: AppHandle, st: State<'_, LiveState>) -> Result<String, String> {
+    pub async fn live_status_enable(app: AppHandle, st: State<'_, LiveState>) -> Result<String, String> {
         let url = ensure(&app, &st)?;
         let p = real_paths();
         let r = install(&p).and_then(|_| profile_dirs(&app).iter().try_for_each(|(a, d)| install_profile(a, d, &p.script)));
@@ -391,7 +391,7 @@ pub mod cmds {
 
     /// 항목을 빼고(프로필 폴더 포함) 수신기를 닫는다
     #[tauri::command]
-    pub fn live_status_disable(app: AppHandle, st: State<'_, LiveState>) -> Result<(), String> {
+    pub async fn live_status_disable(app: AppHandle, st: State<'_, LiveState>) -> Result<(), String> {
         let r = uninstall(&real_paths()).and_then(|_| profile_dirs(&app).iter().try_for_each(|(a, d)| uninstall_profile(a, d)));
         close_receiver(&st);
         r
@@ -399,7 +399,7 @@ pub mod cmds {
 
     /// 새 프로필 폴더 하나에 설치(라이브 상태가 켜져 있을 때 프론트가 부른다) — D12 S-1629
     #[tauri::command]
-    pub fn live_status_install_profile(app: AppHandle, agent: String, id: String) -> Result<(), String> {
+    pub async fn live_status_install_profile(app: AppHandle, agent: String, id: String) -> Result<(), String> {
         let dir = crate::profiles::root(&app)?.join(&agent).join(&id);
         install_profile(&agent, &dir, &real_paths().script)
     }

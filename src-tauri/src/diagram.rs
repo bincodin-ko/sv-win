@@ -39,17 +39,17 @@ fn dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn diagram_put(app: tauri::AppHandle, id: String, json: String) -> Result<(), String> {
+pub async fn diagram_put(app: tauri::AppHandle, id: String, json: String) -> Result<(), String> {
     put_at(&dir(&app)?, &id, &json)
 }
 
 #[tauri::command]
-pub fn diagram_get(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
+pub async fn diagram_get(app: tauri::AppHandle, id: String) -> Result<Option<String>, String> {
     get_at(&dir(&app)?, &id)
 }
 
 #[tauri::command]
-pub fn diagram_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
+pub async fn diagram_delete(app: tauri::AppHandle, id: String) -> Result<(), String> {
     delete_at(&dir(&app)?, &id)
 }
 

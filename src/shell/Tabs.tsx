@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MenuItem } from "./Menu";
 import { useShell } from "./useShell";
+import { hubPathOf, isHub } from "./hubPath";
 import { MAX_NAME, canCloseWorkspace, closeWorkspaceFlow, createWorkspace, renameWorkspace, switchWorkspace, useRepoList } from "./workspaces";
 import { useT } from "../i18n";
 
@@ -11,7 +12,9 @@ export default function Tabs() {
   const t = useT();
   const path = useShell((s) => s.activeRepo);
   const activeWs = useShell((s) => s.openRepos.find((r) => r.path === s.activeRepo)?.activeWs);
-  const list = useRepoList((s) => s.repos.find((r) => r.path === path)?.workspaces ?? EMPTY);
+  const repoList = useRepoList((s) => s.repos.find((r) => r.path === path)?.workspaces ?? EMPTY);
+  const hub = useRepoList((s) => (isHub(path) ? s.hubs.find((h) => hubPathOf(h.id) === path) : undefined)); // H5 S-2873: Hub 는 탭 하나, 이름 바꾸기·+ 없음(이번엔 repo 전용 흐름)
+  const list = hub ? [hub] : repoList;
   const [editing, setEditing] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const refocus = useRef<string | null>(null); // Enter/Esc 로 이름 입력을 끝내면 키보드를 그 탭으로 돌려준다
@@ -40,15 +43,15 @@ export default function Tabs() {
     const i = els.indexOf(e.currentTarget);
     const to = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? els.length - 1 : null;
     if (to !== null) { e.preventDefault(); els[(to + els.length) % els.length]!.focus(); }
-    else if (e.key === "F2") { e.preventDefault(); setEditing(w.id); }
+    else if (e.key === "F2" && !hub) { e.preventDefault(); setEditing(w.id); }
     else if (e.key === "Delete") { e.preventDefault(); void closeWorkspaceFlow(path, w.id); }
   };
   return (
     <div role="tablist" style={{ display: "flex", gap: 4, alignItems: "center", minWidth: 0 }}>
       {list.map((w) => (
         <button key={w.id} data-testid="tab" data-tab-id={w.id} role="tab" aria-selected={w.id === activeWs} tabIndex={w.id === activeWs ? 0 : -1}
-          onClick={() => switchWorkspace(path, w)} onDoubleClick={() => setEditing(w.id)} onKeyDown={(e) => onTabKey(e, w)}
-          onContextMenu={(e) => { e.preventDefault(); setMenu({ id: w.id, x: e.clientX, y: e.clientY }); }}
+          onClick={() => switchWorkspace(path, w)} onDoubleClick={() => !hub && setEditing(w.id)} onKeyDown={(e) => onTabKey(e, w)}
+          onContextMenu={(e) => { e.preventDefault(); if (!hub) setMenu({ id: w.id, x: e.clientX, y: e.clientY }); }}
           style={{ flex: "none", display: "flex", alignItems: "center", gap: 6, height: 26, padding: "0 8px", borderRadius: 6, cursor: "pointer", font: "12px system-ui", color: "var(--text)", background: w.id === activeWs ? "var(--panel-2)" : "transparent", border: `1px solid ${w.id === activeWs ? "var(--accent)" : "var(--border)"}` }}>
           {editing === w.id ? (
             <input data-testid="tab-rename" autoFocus defaultValue={w.name} maxLength={MAX_NAME} size={Math.max(8, w.name.length)} onClick={(e) => e.stopPropagation()} onFocus={(e) => e.target.select()}
@@ -70,7 +73,7 @@ export default function Tabs() {
           {canCloseWorkspace(list.length) && <MenuItem onClick={() => { const id = menu.id; setMenu(null); void closeWorkspaceFlow(path, id); }}>{t("Close")}</MenuItem>}
         </div>
       )}
-      <button data-testid="tab-add" aria-label={t("New workspace")} onClick={() => void createWorkspace(path)} style={{ height: 26, width: 26, borderRadius: 6, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", cursor: "pointer" }}>+</button>
+      {!hub && <button data-testid="tab-add" aria-label={t("New workspace")} onClick={() => void createWorkspace(path)} style={{ height: 26, width: 26, borderRadius: 6, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", cursor: "pointer" }}>+</button>}
     </div>
   );
 }

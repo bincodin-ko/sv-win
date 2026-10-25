@@ -46,7 +46,7 @@ test("S-1802 Esc 로 닫히고, 열려 있는 동안 보드 한 글자 키는 �
 test("S-1804 Tools 메뉴 순서(스튜디오 항목은 등록돼 있을 때만, Documents 는 없다)", async ({ page }) => {
   await boot(page);
   await page.getByTestId("tools-btn").click();
-  await expect(page.getByRole("menuitem")).toHaveText(["Presets", "GitHub", "Code", "Markdown", "Mission Map", "Memory", "Skills", "Loops", "Settings"]);
+  await expect(page.getByRole("menuitem")).toHaveText(["All conversations", "Presets", "GitHub", "Code", "Markdown", "Mission Map", "Memory", "Skills", "Loops", "Settings"]);
 });
 
 test("S-1805 우측 레일: Browse project code·Browse markdown docs·Generate PDF(고르면 Documents 에서 그 항목만 선택)", async ({ page }) => {

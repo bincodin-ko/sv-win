@@ -22,8 +22,9 @@ export interface Screen {
   text(): Promise<string>;
   dispose(): void;
 }
-export function createScreen(): Screen {
+export function createScreen(onData?: (d: string) => void): Screen {
   const term = new Terminal({ cols: 200, rows: 50, scrollback: 5000, allowProposedApi: true });
+  if (onData) term.onData(onData); // 커서 위치 질문(CPR) 등에 대한 터미널의 답을 PTY 로 보낸다
   let last: Promise<void> = Promise.resolve();
   return {
     write(data) {

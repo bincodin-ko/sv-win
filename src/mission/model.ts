@@ -22,7 +22,7 @@ export type MModel = {
   consoles: MConsole[];
   lines: MLine[];
 };
-export type Opts = { filter?: Filter; query?: string; now?: number; agentName?: (id: string) => string };
+export type Opts = { filter?: Filter; query?: string; now?: number; agentName?: (id: string) => string; subsOf?: (nodeId: string) => { name: string; title: string }[] };
 export const GLOW_MS = 1500;
 
 /** S-1304: 상태 9가지 → 4가지. hook(live status)이 있는 콘솔의 READY 만 Idle, hook 없는 IDLE·READY 는 Working */
@@ -59,8 +59,9 @@ export function missionModel(nodes: Record<string, BoardNode>, groups: Group[], 
   };
   const wireds = orchs.map((c) => ({ c, w: wiredOf(c) }));
 
+  const subHit = (id: string) => !!q && (o.subsOf?.(id) ?? []).some((x) => has(x.name, q) || has(x.title, q));
   const gHit = (id: string | null) => !!q && id !== null && has(gById.get(id)!.name, q);
-  const visibleC = all.filter((c) => (filter === "all" || c.state === filter) && (!q || has(c.name, q) || has(c.agent, q) || (c.role !== null && has(c.role, q)) || gHit(c.groupId)));
+  const visibleC = all.filter((c) => (filter === "all" || c.state === filter) && (!q || has(c.name, q) || has(c.agent, q) || (c.role !== null && has(c.role, q)) || gHit(c.groupId) || subHit(c.id)));
   const vIds = new Set(visibleC.map((c) => c.id));
 
   const mGroups: MGroup[] = groups.flatMap((g) => {

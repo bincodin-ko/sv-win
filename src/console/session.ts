@@ -1,6 +1,7 @@
 // 콘솔 1개의 PTY 수명: spawn spec → pty_spawn → 출력·종료 처리, Restart, 에이전트 종료 시 셸로 떨어지기(S-070),
 // 셸 종료 코드(S-071), 슬립 감지(S-072), 못 찾음 글(S-165). 화면(xterm)은 board/ConsoleNode 가 만들어 넘긴다.
 // A9: 복원 메모(S-233), Resume 제안 받아들이기(S-234), 대화 id 기록(S-237·S-238), 마지막 대화 시각(S-239), 8초 규칙(S-240).
+import { limitSpawn } from "./spawnQueue";
 import type { Terminal } from "@xterm/xterm";
 import { agentSpawnSpec, agentsList, settingsGet, type Resume } from "../agents/api";
 import { DEFAULT_SCOPE, type Scope } from "../board/boards";
@@ -11,6 +12,7 @@ import { useSettings } from "../settings/useSettings";
 import type { IMarker } from "@xterm/xterm";
 import { screenReply } from "../output/reply";
 import { setReply as setOutput } from "../output/useOutputs";
+import { pendingWriter } from "./pendingWriter";
 import { codexFindSession, debugTerms, isTauri, lastReply, ptyBatch, ptyKill, ptyPause, ptyResize, ptyResume, ptySpawn, ptyWrite } from "../lib/ipc";
 import { writeDim } from "../terminal/TerminalView";
 import { addTick } from "./ticker";
@@ -19,7 +21,7 @@ import { isLowSpec } from "../perf/lowSpec";
 import { feed as autoFeed } from "../web/autoHost";
 import { confirmClose } from "./ConfirmClose";
 import { consoleProfile } from "../profiles/env";
-import { getRepoPath, takeRestored, useOffers } from "./offers";
+import { consoleCwd, takeResumeFirst, takeRestored, useOffers } from "./offers";
 import { pauseAll, resumeAll } from "./pause";
 import { sessionKey } from "./sessionKey";
 import { markSince } from "../mission/since";
@@ -111,6 +113,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
   let agentId = o.agentId;
   let gen = 0; // 새 PTY 마다 +1. 지난 PTY 의 콜백은 gen 이 달라 무시된다
   let ptyId: number | null = null;
+  const pw = pendingWriter(ptyWrite); // id 오기 전 xterm 응답(CPR 등)을 버리지 않고 모았다 보낸다
   let alive = false; // 시작 중이거나 살아 있음
   let paused = false; // S-620: 프로세스 트리가 멈춰 있음
   let mode: "agent" | "shell" | "fallback" = agentId === "shell" ? "shell" : "agent"; // B12: 지금 돌고 있는 것의 종류
@@ -166,6 +169,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
       debugTerms.delete(ptyId);
       void ptyKill(ptyId);
       ptyId = null;
+      pw.setId(null);
     }
   };
 
@@ -173,10 +177,11 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
     const g = ++gen;
     alive = true;
     mode = m;
+    pw.clear();
     gotOutput = false;
     send({ type: "spawn", mode: m });
     try {
-      const id = await ptySpawn({
+      const id = await limitSpawn(() => ptySpawn({
         program: spec.program,
         args: spec.args,
         env: spec.env,
@@ -199,16 +204,18 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
             useOffers.getState().add(lastOffer); // S-240: resume 프로세스가 8초 안에 끝나면 제안이 다시 뜬다(콘솔은 아래에서 셸로 떨어짐)
           }
           resumedAt = null;
-          ptyId = null; // debugTerms 에는 남겨 둔다(시험이 끝난 터미널의 마지막 화면을 읽는다)
+          ptyId = null;
+          pw.setId(null); // debugTerms 에는 남겨 둔다(시험이 끝난 터미널의 마지막 화면을 읽는다)
           if (asAgent) void fallToShell(); // S-070
           else {
             dim(`[exited with code ${code ?? "?"}]`); // S-071
             send({ type: "exit", code });
           }
         },
-      });
+      }));
       if (g !== gen || disposed) return void ptyKill(id);
       ptyId = id;
+      pw.setId(id);
       applyBatch();
       debugTerms.set(id, term);
     } catch (e) {
@@ -282,7 +289,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
 
   // S-238: Codex 는 시작 때 id 를 지정하는 플래그를 몰라 rollout 파일로 짝짓는다. 파일이 늦게 생길 수 있어 몇 번 다시 본다
   async function findCodex(g: number, since: number, tries: number) {
-    const repo = getRepoPath(wsId);
+    const repo = consoleCwd(wsId, useBoard.getState().nodes[nodeId]);
     if (!repo || g !== gen || disposed) return;
     const claimed = Object.values(useBoard.getState().nodes).flatMap((n) => {
       const id = isConsole(n) && n.id !== nodeId ? (n.resume as { codexSessionId?: string } | undefined)?.codexSessionId : undefined;
@@ -295,13 +302,13 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
   }
 
   const input = (d: string) => {
-    if (ptyId === null) return;
+    if (ptyId === null) return void pw.send(d);
     if (d.includes("\r")) {
       bw.flush(); // P2: 쌓인 출력이 먼저 커서를 옮기게
       inputMark?.dispose();
       inputMark = term.registerMarker(0) ?? null; // 되울림이 커서를 옮기기 전에(가짜 PTY 는 되울림이 바로 그려진다)
     }
-    void ptyWrite(ptyId, d);
+    pw.send(d);
     if (d.includes("\r")) {
       send({ type: "userEnter" });
       patchResume({ lastChatAt: Date.now() }); // S-239: Enter 가 든 입력 = 대화했다
@@ -311,7 +318,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
     const n = useBoard.getState().nodes[nodeId];
     const saved = isConsole(n) ? (n.resume as { claudeSessionId?: string; codexSessionId?: string } | undefined) : undefined;
     const sid = agentId === "claude" ? (liveIds.claude ?? saved?.claudeSessionId) : agentId === "codex" ? (liveIds.codex ?? saved?.codexSessionId) : undefined;
-    const repo = getRepoPath(wsId);
+    const repo = consoleCwd(wsId, useBoard.getState().nodes[nodeId]);
     if (repo && sid) {
       const t = await lastReply(agentId, repo, sid, profDir).catch(() => null);
       if (t) return t;
@@ -434,7 +441,9 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
     },
   };
   sessions.set(key, session);
-  void start();
+  const placed = takeResumeFirst(key); // H3 S-2841: 보드에 놓은 대화는 첫 시작부터 이어가기(제안 배너·새 --session-id 없음)
+  if (placed) void agentName().then((n) => start({ resume: { kind: "own", sessionId: placed }, memo: pickingMemo(n) }));
+  else void start();
   return session;
 }
 

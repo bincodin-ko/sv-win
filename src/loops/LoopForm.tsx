@@ -1,5 +1,7 @@
 // D9 S-1453·S-1454·S-1456 Loop 폼. 칩·카드 모양은 추측, 구성은 영상(sheets/node-loops.jpg)
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { agentsList, type AgentInfo } from "../agents/api";
+import { pickerRows } from "../agents/transcriptSupport";
 import { tm, useT } from "../i18n";
 import { useSettings } from "../settings/useSettings";
 import { openSettings } from "../ui/useUi";
@@ -20,6 +22,8 @@ export default function LoopForm({ initial, editing, consoles, cards, count, unh
   const t = useT();
   const [d, setD] = useState(initial);
   const [notes, setNotes] = useState<string[]>([]);
+  const [agents, setAgents] = useState<AgentInfo[] | null>(null); // null = 아직 모름(모두 고를 수 있게 둔다)
+  useEffect(() => void agentsList().then(setAgents).catch(() => undefined), []);
   const live = useSettings((s) => s.s.liveStatus === true);
   const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
   const settle = () => { const r = fixRanges(d); setD(r.draft); setNotes(r.notes); return r; };
@@ -82,7 +86,7 @@ export default function LoopForm({ initial, editing, consoles, cards, count, unh
             <label><input type="radio" name="lf-gm" data-testid="lf-goal-mode-command" checked={d.goalMode === "command"} onChange={() => set({ goalMode: "command" })} /> {t("A command passes")}</label>
             <label>
               <input type="radio" name="lf-gm" data-testid="lf-goal-mode-agent" checked={d.goalMode === "agent"} onChange={() => set({ goalMode: "agent" })} /> {t("An agent judges")}{" "}
-              {d.goalMode === "agent" && <select data-testid="lf-goal-agent" value={d.goalAgent} onChange={(e) => set({ goalAgent: e.target.value })}><option value="claude">Claude</option><option value="codex">Codex</option></select>}
+              {d.goalMode === "agent" && <select data-testid="lf-goal-agent" value={d.goalAgent} onChange={(e) => set({ goalAgent: e.target.value })}>{pickerRows(agents ?? [], ["claude", "codex", "gemini", "opencode"]).filter((r) => !r.why).map((r) => <option key={r.id} value={r.id} disabled={agents !== null && !r.enabled}>{r.name}</option>)}</select>}
             </label>
             {d.goalMode === "agent" && <div data-testid="lf-goal-note" style={{ font: "12px system-ui", color: "var(--fg-2)" }}>{t("Each check uses a turn on your plan.")}</div>}
             <input data-testid="lf-goal" value={d.goalText} placeholder={d.goalMode === "command" ? "npm test" : t("All tests pass")} onChange={(e) => set({ goalText: e.target.value })} style={field} />

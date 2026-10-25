@@ -38,6 +38,9 @@ const tell = (targets: Extract<Intent, { t: "tell" }>["targets"], text: string):
 const table: [string, Intent][] = [
   // S-2490 시작 · 수 낱말 · 단위
   ["클로드 두 개 띄워", { t: "spawn", n: 2, agentId: "claude" }],
+  // 받아쓰기 오인식 별칭: '숫자+개' 앞일 때만
+  ["clod 2개 띄워주세요", { t: "spawn", n: 2, agentId: "claude" }],
+  ["codecs 3개 띄워주세요", { t: "spawn", n: 3, agentId: "codex" }],
   ["클로드 2개 실행해줘", { t: "spawn", n: 2, agentId: "claude" }],
   ["코덱스 세 개 만들어", { t: "spawn", n: 3, agentId: "codex" }],
   ["에이전트 하나 생성해", { t: "spawn", n: 1 }],
@@ -152,6 +155,11 @@ const table: [string, Intent][] = [
   ["코드 열어", { t: "open", what: "code" }],
   ["마크다운 열어", { t: "open", what: "markdown" }],
   ["스킬 열어", { t: "open", what: "skills" }],
+  // H2 S-2821
+  ["대화 목록 열어", { t: "open", what: "conversations" }],
+  ["모든 대화 열어", { t: "open", what: "conversations" }],
+  ["대화 목록", { t: "open", what: "conversations" }],
+  ["모든 대화", { t: "open", what: "conversations" }],
   ["지금 열린 거 닫아", { t: "closePanel" }],
   ["패널 닫아", { t: "closePanel" }],
   ["localhost 3000 열어", { t: "openWeb", url: "http://localhost:3000" }],
@@ -265,7 +273,7 @@ describe("S-2520 한국어 도움말 예문은 전부 해석된다", () => {
   it("helpText()의 예문이 needsPlanner 가 아니다", () => {
     setLang("ko");
     try {
-      const lines = helpText().split("\n").slice(1);
+      const lines = helpText().split("\n").slice(1, -1); // 마지막 줄은 planner 안내(S-2985), 명령 예문이 아니다
       const examples = lines.flatMap((l) => l.replace(/^•\s*/, "").split(" · "));
       expect(examples.length).toBeGreaterThanOrEqual(30);
       const bad = examples.filter((e) => parse(e, ctx).t === "needsPlanner");

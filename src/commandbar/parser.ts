@@ -125,7 +125,7 @@ const wrap = (r: R, f: (t: Target) => Intent): Intent => ("ok" in r ? f(r.ok) : 
 const opt = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
 // ---- D15 (S-1730~S-1738): 패널 열기·orchestrator·loop·handoff·forward 말 ----
-const PANELS: Record<string, "mission" | "memory" | "loops" | "usage"> = { "mission map": "mission", mission: "mission", memory: "memory", loops: "loops", loop: "loops", usage: "usage" };
+const PANELS: Record<string, "mission" | "memory" | "loops" | "usage" | "conversations"> = { conversations: "conversations", "all conversations": "conversations", "mission map": "mission", mission: "mission", memory: "memory", loops: "loops", loop: "loops", usage: "usage" };
 const HAND = [
   /^hand\s+(?:(?:this|it|that|the task)\s+)?off\s+to\s+(.+)$/i,
   /^(?:pass|hand|send|move)\s+(?:this task|this|it|that|the task)\s+(?:over\s+)?to\s+(.+)$/i,
@@ -206,6 +206,8 @@ function run(text: string, ctx: ParseCtx): Intent {
 
   let m: ReturnType<typeof mt>;
 
+  // H2 S-2821: 맨말 conversations / all conversations 도 연다
+  if (PANELS[s.toLowerCase()] === "conversations") return { t: "open", what: "conversations" };
   // 화면 열기
   if ((m = mt(s, /^open\s+(.+)$/i))) {
     const w = m[1].toLowerCase();
@@ -332,6 +334,7 @@ function run(text: string, ctx: ParseCtx): Intent {
     if (r.err.t === "ambiguous") return r.err;
   }
   // ponytail: 동사 목록 휴리스틱 — 목록 밖 문장은 needsPlanner, 모자라면 동사를 더한다
+  if (ctx.planner && /\b(?:spawn|open|make|create|launch|start|add|set\s*up)\b.*\b(?:claude|codex|gemini|console|terminal|agent|session|window|tab)\b/i.test(s)) return NP; // 최종 확인 8번: 콘솔을 만드는 말을 못 읽었으면 콘솔로 보내지 않는다
   if (/^(run|write|review|fix|test|check|implement|refactor|update|debug|investigate|summarize|explain|read|build|deploy|lint|document)\b.+/i.test(s))
     return { t: "orderUnrouted", text: s };
   return NP;

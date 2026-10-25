@@ -92,13 +92,13 @@ pub fn login_spec(found: Option<&Path>, shell: (String, Vec<String>), ps: &str) 
 }
 
 #[tauri::command]
-pub fn gh_status() -> GhStatus {
-    status()
+pub async fn gh_status() -> GhStatus {
+    tauri::async_runtime::spawn_blocking(status).await.unwrap_or(GhStatus { installed: false, user: None })
 }
 
 #[tauri::command]
-pub fn gh_logout() -> Result<(), String> {
-    logout()
+pub async fn gh_logout() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(logout).await.map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

@@ -5,7 +5,7 @@ import { useScope } from "../board/BoardScope";
 import { openUrl, webProbe, webWindowOpen } from "../lib/ipc";
 import Dial from "./Dial";
 import { fitDevice } from "./devices";
-import { isLocalUrl, onProbe, type Wait } from "./waitState";
+import { isLocalUrl, nextDelay, onProbe, type Wait } from "./waitState";
 import { zoomBox } from "./zoom";
 import { useT } from "../i18n";
 
@@ -39,6 +39,7 @@ export default function TabPane({ nodeId, tab, active, avail, device, zoom, cmd,
     const local = isLocalUrl(url);
     setPhase("probing");
     const step = async () => {
+      const t0 = Date.now();
       if (!vis.current) return void (timer = setTimeout(step, 1000));
       let r;
       try { r = await webProbe(url); } catch { r = null; } // 헤더를 못 읽으면 그냥 iframe 을 시도(S-1110)
@@ -47,7 +48,7 @@ export default function TabPane({ nodeId, tab, active, avail, device, zoom, cmd,
       if (r.reachable && r.frameBlocked) return setPhase("blocked");
       w = onProbe(w, r.reachable, local);
       setPhase(w.phase);
-      if (w.phase === "waiting") timer = setTimeout(step, 1000);
+      if (w.phase === "waiting") timer = setTimeout(step, nextDelay(t0, Date.now()));
     };
     void step();
     return () => { dead = true; clearTimeout(timer); };

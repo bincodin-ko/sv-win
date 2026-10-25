@@ -7,6 +7,7 @@ import { captureLayout, nextSetName } from "../../presets/saved";
 import { useSaved } from "../../presets/useSaved";
 import { useLoops } from "../../loops/store";
 import { useShell } from "../../shell/useShell";
+import { isHub } from "../../shell/hubPath";
 import { useUi } from "../../ui/useUi";
 import { kindsWith, placeNew } from "../kinds/registry";
 import { hasStudio, requestOpenStudio } from "../../studio/useStudio";
@@ -18,6 +19,7 @@ export default function RightRail() {
   const t = useT();
   const { visible } = useScope(); // 숨은 워크스페이스의 레일은 그리지 않는다
   const store = useBoardStore();
+  const hub = isHub(useShell((s) => s.activeRepo)); // H5 S-2876: 폴더 없는 Hub 에는 Loops 없음
   const saved = useSaved((s) => s.list);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -54,12 +56,12 @@ export default function RightRail() {
       )}
       </div>
       <InsertTodo />
-      <StudioButtons />
+      {!hub && <StudioButtons />}
       {kindsWith("rail").map((k) => (
         <button key={k.id} data-testid={`rail-insert-${k.id}`} onClick={() => void placeNew(store, k.id)}
           style={railBtn}>{t("Insert {label}", { label: t(k.rail!.label) })}</button>
       ))}
-      <LoopsButton />
+      {!hub && <LoopsButton />}
     </div>
   );
 }

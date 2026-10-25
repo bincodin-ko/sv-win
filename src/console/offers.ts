@@ -31,22 +31,37 @@ export const useOffers = create<OfferState>((set) => ({
 const restored = new Set<string>();
 export const takeRestored = (key: string): boolean => restored.delete(key);
 
+// H3: 보드에 놓은 콘솔의 첫 시작 = 이 대화를 이어가기(한 번용, restored 와 같은 꼴)
+const resumeFirst = new Map<string, string>();
+export const markResumeFirst = (key: string, sessionId: string): void => void resumeFirst.set(key, sessionId);
+export const takeResumeFirst = (key: string): string | undefined => {
+  const id = resumeFirst.get(key);
+  resumeFirst.delete(key);
+  return id;
+};
+
 const repoPaths = new Map<string, string>(); // wsId → repo 경로
 export const setRepoPath = (p: string | null, wsId = "") => void (p ? repoPaths.set(wsId, p) : repoPaths.delete(wsId));
 export const getRepoPath = (wsId = "") => repoPaths.get(wsId);
 
+/** H4 S-2851: 콘솔 폴더 = 노드 cwd → 보드 repo → 없음 */
+export const consoleCwd = (wsId: string, n: BoardNode | undefined): string | undefined => (n && isConsole(n) && typeof n.cwd === "string" && n.cwd) || getRepoPath(wsId);
+/** H4 S-2855: 대소문자·구분자·끝 구분자를 무시하고 같은 폴더인가 */
+const norm = (p: string) => p.toLowerCase().replace(/\//g, "\\").replace(/\\+$/, "");
+export const sameFolder = (a: string, b: string): boolean => !!a && norm(a) === norm(b);
+
 /** 보드를 불러온 직후, 콘솔이 마운트되기 전에 부른다: 복원 표시 + 제안 계산 (S-233·S-236) */
 export async function prepareRestore(wsId: string, nodes: Record<string, BoardNode>): Promise<void> {
-  const repoPath = getRepoPath(wsId);
   const cons = Object.values(nodes).filter(isConsole);
   cons.forEach((c) => restored.add(sessionKey(wsId, c.id)));
   const enabled = (await settingsGet()).resumeAgentChats !== false;
   const ok = new Set<string>();
-  if (enabled && repoPath)
+  if (enabled)
     await Promise.all(
       cons.flatMap((c) => {
+        const repoPath = consoleCwd(wsId, c);
         const id = c.agentId === "claude" ? (c.resume as { claudeSessionId?: string } | undefined)?.claudeSessionId : undefined;
-        return id ? [consoleProfile("claude", c.profile).then((cp) => claudeTranscriptExists(repoPath, id, cp.dir)).then((e) => e && ok.add(id))] : [];
+        return id && repoPath ? [consoleProfile("claude", c.profile).then((cp) => claudeTranscriptExists(repoPath, id, cp.dir)).then((e) => e && ok.add(id))] : [];
       }),
     );
   useOffers.getState().set(pickOffers(cons.map((c) => ({ id: c.id, agentId: c.agentId, resume: c.resume as never })), { enabled, transcriptExists: (s) => ok.has(s) }).map((o) => ({ ...o, nodeId: sessionKey(wsId, o.nodeId) })));

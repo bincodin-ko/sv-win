@@ -26,12 +26,13 @@ export default function ScanFlow() {
         <b style={{ fontSize: 14 }}>{t("Scan repo")}</b>
         <div style={dim}>{t("An agent reads the repository and proposes facts. It changes nothing in your files.")}</div>
         <div style={lab}>{t("AGENT")}</div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {s.agents.map((a) => (
-            <button key={a.id} data-testid={`scan-agent-${a.id}`} aria-pressed={s.agent === a.id} onClick={() => { useScan.setState({ agent: a.id }); useSettings.getState().patch({ memoryAgent: a.id }); }} style={pill(s.agent === a.id)}>{a.label}</button>
+            <button key={a.id} data-testid={`scan-agent-${a.id}`} aria-pressed={s.agent === a.id} disabled={!!a.why} aria-disabled={!!a.why} title={a.why} onClick={() => { useScan.setState({ agent: a.id }); useSettings.getState().patch({ memoryAgent: a.id }); }} style={a.why ? { ...pill(false), opacity: 0.45, cursor: "not-allowed" } : pill(s.agent === a.id)}>{a.label}</button>
           ))}
-          {!s.agents.length && <span data-testid="scan-install-hint" style={dim}>{t("Install Claude Code or Codex")}</span>}
+          {!s.agents.some((a) => !a.why) && <span data-testid="scan-install-hint" style={dim}>{t("Install Claude Code or Codex")}</span>}
         </div>
+        {s.agents.filter((a) => a.why).map((a) => <div key={a.id} data-testid={`scan-why-${a.id}`} style={{ ...dim, marginTop: 4 }}>{a.why}</div>)}
         <div style={lab}>{t("QUALITY")}</div>
         <div style={{ display: "flex", gap: 6 }}>
           {QUALITIES.map(([q, name]) => (

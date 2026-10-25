@@ -8,6 +8,8 @@ import { prepareRestore, setRepoPath } from "../console/offers";
 import { removeRepoFrom } from "../home/repoList";
 import { boardLoad, boardSave, dirExists, reposGet, reposSet } from "../lib/ipc";
 
+import { isHub } from "./hubPath";
+export { isHub };
 export type WsRef = { path: string; id: string; name: string };
 export type OpenWs = { id: string; name: string; loaded: boolean; readOnly?: boolean };
 export type OpenRepo = { path: string; workspaces: OpenWs[]; activeWs: string | null };
@@ -75,6 +77,9 @@ export const useShell = create<Shell>((set, get) => ({
   markLoaded: (wsId, readOnly) => set((s) => ({ openRepos: mapWs(s.openRepos, wsId, (w) => ({ ...w, loaded: true, readOnly })) })),
 }));
 
+/** 이 워크스페이스가 Hub 보드에 속하는가 */
+export const isHubWs = (wsId: string): boolean => isHub(useShell.getState().openRepos.find((r) => r.workspaces.some((w) => w.id === wsId))?.path);
+
 type Handle = Awaited<ReturnType<typeof attachBoard>>;
 const handles = new Map<string, Promise<Handle>>();
 export const handleOf = (wsId: string) => handles.get(wsId);
@@ -83,7 +88,7 @@ export const handleOf = (wsId: string) => handles.get(wsId);
 export function loadWorkspace(ws: WorkspaceInfo, init?: (store: BoardStore) => void): Promise<Handle> {
   let p = handles.get(ws.id);
   if (!p) {
-    setRepoPath(ws.repoPath, ws.id);
+    setRepoPath(isHub(ws.repoPath) ? null : ws.repoPath, ws.id);
     p = attachBoard(ws, { load: boardLoad, save: boardSave }, (nodes) => prepareRestore(ws.id, nodes), getStore(ws.id)).then((h) => {
       init?.(getStore(ws.id));
       useShell.getState().markLoaded(ws.id, h.readOnly);

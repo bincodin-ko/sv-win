@@ -175,4 +175,22 @@ export default {
   "branch-name": "branch-name",
   "Delete {name}": "{name} 삭제",
   "Delete branch": "Branch 삭제",
+  // H5 폴더 없는 Hub 보드
+  "New Hub board": "새 Hub 보드",
+  "Hubs": "Hub 보드",
+  "Remove {name}? Its consoles close.": "{name}을(를) 제거할까요? 콘솔이 닫혀요.",
+  "Hub boards have no folder — drop files on a repo board": "Hub 보드에는 폴더가 없어요 — 파일은 repo 보드에 놓아 주세요",
+  "This board has no folder, so git isn't available": "이 보드에는 폴더가 없어서 git을 쓸 수 없어요",
+  // 12묶음 Q2 S-3128: 업데이트 확인 (태그·SHA-256·GitHub 는 번역 안 함. "Not now" 는 console.ts 에 있음)
+  "Symvibe {tag} is available.": "Symvibe {tag} 새 버전이 나왔어요.",
+  "Get installer": "설치 파일 받기",
+  "Release page": "릴리스 페이지",
+  "Updates": "업데이트",
+  "Check now": "지금 확인",
+  "Checking…": "확인하는 중…",
+  "You're up to date": "최신 버전이에요",
+  "Version {tag} is available": "{tag} 버전이 나왔어요",
+  "Couldn't check for updates": "업데이트를 확인하지 못했어요",
+  "Check for updates at startup": "시작할 때 업데이트 확인",
+  "SHA-256: {sha256}": "SHA-256: {sha256}",
 } as Record<string, string>;

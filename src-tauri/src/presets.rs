@@ -30,12 +30,12 @@ pub fn file(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn presets_get(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+pub async fn presets_get(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
     Ok(load(&file(&app)?))
 }
 
 #[tauri::command]
-pub fn presets_set(app: tauri::AppHandle, list: Vec<Value>) -> Result<(), String> {
+pub async fn presets_set(app: tauri::AppHandle, list: Vec<Value>) -> Result<(), String> {
     save(&file(&app)?, &list)
 }
 

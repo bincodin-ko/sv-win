@@ -308,32 +308,32 @@ fn repo_of(repo: &Option<String>) -> Option<PathBuf> {
     repo.as_deref().filter(|r| !r.is_empty()).map(PathBuf::from)
 }
 #[tauri::command]
-pub fn skills_scan(repo: Option<String>) -> ScanOut {
+pub async fn skills_scan(repo: Option<String>) -> ScanOut {
     scan(&home_dir(), repo_of(&repo).as_deref())
 }
 #[tauri::command]
-pub fn skills_write(repo: Option<String>, path: String, text: String, expect_mtime: Option<u64>) -> Result<u64, String> {
+pub async fn skills_write(repo: Option<String>, path: String, text: String, expect_mtime: Option<u64>) -> Result<u64, String> {
     write(&home_dir(), repo_of(&repo).as_deref(), Path::new(&path), &text, expect_mtime)
 }
 #[tauri::command]
-pub fn skills_create(repo: Option<String>, scope: String, name: String, text: String) -> Result<String, String> {
+pub async fn skills_create(repo: Option<String>, scope: String, name: String, text: String) -> Result<String, String> {
     create(&home_dir(), repo_of(&repo).as_deref(), &scope, &name, &text)
 }
 #[tauri::command]
-pub fn skills_import_check(src: String) -> Result<String, String> {
+pub async fn skills_import_check(src: String) -> Result<String, String> {
     import_check(Path::new(&src))
 }
 #[tauri::command]
-pub fn skills_import(repo: Option<String>, scope: String, src: String) -> Result<String, String> {
+pub async fn skills_import(repo: Option<String>, scope: String, src: String) -> Result<String, String> {
     import(&home_dir(), repo_of(&repo).as_deref(), &scope, Path::new(&src))
 }
 #[tauri::command]
-pub fn skills_duplicate(repo: Option<String>, src: String, scope: String) -> Result<String, String> {
+pub async fn skills_duplicate(repo: Option<String>, src: String, scope: String) -> Result<String, String> {
     duplicate(&home_dir(), repo_of(&repo).as_deref(), Path::new(&src), &scope)
 }
 #[tauri::command]
-pub fn skills_delete(repo: Option<String>, path: String) -> Result<(), String> {
-    delete(&home_dir(), repo_of(&repo).as_deref(), Path::new(&path), &|p| crate::fs::trash_move(s(p)))
+pub async fn skills_delete(repo: Option<String>, path: String) -> Result<(), String> {
+    delete(&home_dir(), repo_of(&repo).as_deref(), Path::new(&path), &|p| crate::fs::trash_move_sync(s(p)))
 }
 
 #[cfg(test)]

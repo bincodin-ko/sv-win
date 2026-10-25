@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 pub const TAIL_BYTES: u64 = 2 * 1024 * 1024;
 
 /// 파일 끝 TAIL_BYTES 만 읽어 줄 목록으로. 잘렸으면 첫(조각난) 줄은 버린다
-fn tail_lines(p: &Path) -> Option<Vec<String>> {
+pub(crate) fn tail_lines(p: &Path) -> Option<Vec<String>> {
     let mut f = fs::File::open(p).ok()?;
     let len = f.metadata().ok()?.len();
     let cut = len > TAIL_BYTES;
@@ -27,8 +27,8 @@ fn tail_lines(p: &Path) -> Option<Vec<String>> {
     Some(lines.map(str::to_string).collect())
 }
 
-fn safe_id(id: &str) -> bool {
-    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+pub(crate) fn safe_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') // '_' : OpenCode 세션 id(ses_…)
 }
 
 /// Claude: 뒤에서부터 type=assistant 줄 중 글 블록(text)이 있는 첫 줄의 마지막 글 블록
@@ -37,6 +37,9 @@ fn claude_reply(lines: &[String]) -> Option<String> {
         let v: Value = serde_json::from_str(l).ok()?;
         if v.get("type")?.as_str()? != "assistant" {
             return None;
+        }
+        if v.get("isSidechain").and_then(Value::as_bool) == Some(true) {
+            return None; // 옛 판은 하위 에이전트 대화를 같은 파일에 썼다 (S-3146)
         }
         let blocks = v.get("message")?.get("content")?.as_array()?;
         blocks.iter().rev().find_map(|b| (b.get("type")?.as_str()? == "text").then(|| b.get("text")?.as_str().map(str::to_string)).flatten())
@@ -93,7 +96,11 @@ pub fn last_reply_dirs(agent: &str, repo: &str, session_id: &str, claude_dir: &P
     if !safe_id(session_id) {
         return None;
     }
+    if agent == "opencode" {
+        return crate::agent_logs::opencode_run_reply(repo, session_id).filter(|t| !t.trim().is_empty());
+    }
     let (file, pick): (PathBuf, fn(&[String]) -> Option<String>) = match agent {
+        "gemini" => (crate::agent_logs::gemini_file(&crate::agent_logs::gemini_home()?, repo, session_id)?, crate::agent_logs::gemini_reply),
         "claude" => (claude_dir.join("projects").join(project_dir_name(repo)).join(format!("{session_id}.jsonl")), claude_reply),
         "codex" => (codex_file(session_id, codex_home)?, codex_reply),
         _ => return None,
@@ -126,7 +133,7 @@ pub fn outputs_save(repo: &str, name: &str, stamp: &str, content: &str) -> Resul
 }
 
 #[tauri::command]
-pub fn last_reply_cmd(agent: String, repo: String, session_id: String, config_dir: Option<String>) -> Option<String> {
+pub async fn last_reply_cmd(agent: String, repo: String, session_id: String, config_dir: Option<String>) -> Option<String> {
     let h = home()?;
     let dir = config_dir.map(PathBuf::from);
     let claude = if agent == "claude" { dir.clone() } else { None }.unwrap_or_else(|| h.join(".claude"));
@@ -135,7 +142,7 @@ pub fn last_reply_cmd(agent: String, repo: String, session_id: String, config_di
 }
 
 #[tauri::command]
-pub fn outputs_save_cmd(repo: String, name: String, stamp: String, content: String) -> Result<String, String> {
+pub async fn outputs_save_cmd(repo: String, name: String, stamp: String, content: String) -> Result<String, String> {
     outputs_save(&repo, &name, &stamp, &content).map(|p| p.to_string_lossy().into_owned())
 }
 
@@ -211,7 +218,7 @@ mod tests {
         fs::write(claude_file(&home), "not json\n").unwrap();
         assert_eq!(last_reply("claude", REPO, ID, &home), None, "깨진 줄만");
         assert_eq!(last_reply("claude", REPO, r"..\x", &home), None, "경로 조각이 든 id 는 거부");
-        assert_eq!(last_reply("gemini", REPO, ID, &home), None, "지원하지 않는 에이전트(화면 방식으로)");
+        assert_eq!(last_reply("grok", REPO, ID, &home), None, "지원하지 않는 에이전트(화면 방식으로)");
         let _ = fs::remove_dir_all(&home);
     }
 
@@ -247,6 +254,44 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
+    // Q3 S-3146: isSidechain 줄(옛 판의 하위 에이전트 대화)은 답이 아니다
+    #[test]
+    fn claude_skips_sidechain() {
+        let home = tmp("side");
+        let main = asst(serde_json::json!([{"type": "text", "text": "main answer"}]));
+        let mut side = serde_json::json!({"type": "assistant", "isSidechain": true, "message": {"role": "assistant", "content": [{"type": "text", "text": "subagent chatter"}]}});
+        fs::write(claude_file(&home), format!("{main}{side}\n")).unwrap();
+        assert_eq!(last_reply("claude", REPO, ID, &home).as_deref(), Some("main answer"));
+        side["isSidechain"] = serde_json::json!(false);
+        fs::write(claude_file(&home), format!("{main}{side}\n")).unwrap();
+        assert_eq!(last_reply("claude", REPO, ID, &home).as_deref(), Some("subagent chatter"), "false 면 그대로 읽는다");
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    // Q3 S-3145: last_reply_dirs 의 gemini 갈래를 끝까지(홈 = GEMINI_CLI_HOME). opencode 는 실행이라 여기서 안 돌린다
+    #[test]
+    fn gemini_through_last_reply_dirs() {
+        let gh = tmp("gem-home");
+        let g = gh.join(".gemini");
+        let chats = g.join("tmp").join("myrepo").join("chats");
+        fs::create_dir_all(&chats).unwrap();
+        fs::write(g.join("projects.json"), serde_json::json!({"projects": {r"c:\work\myrepo": "myrepo"}}).to_string()).unwrap();
+        let l = |v: serde_json::Value| format!("{v}\n");
+        let mut s = l(serde_json::json!({"sessionId": "bbbbbbbb-2", "startTime": "2026-10-25T10:00:10.000Z"}));
+        s += &l(serde_json::json!({"id": "u1", "type": "user", "content": "q"}));
+        s += &l(serde_json::json!({"id": "g1", "type": "gemini", "content": "gemini says hi"}));
+        fs::write(chats.join("session-2026-10-25T10-00-bbbbbbbb.jsonl"), s).unwrap();
+        std::env::set_var("GEMINI_CLI_HOME", &gh);
+        let other = tmp("gem-other");
+        let r = last_reply_dirs("gemini", r"C:\Work\MyRepo", "bbbbbbbb-2", &other, &other);
+        let bad = last_reply_dirs("gemini", r"C:\Work\MyRepo", "bbbbbbbb-9", &other, &other);
+        std::env::remove_var("GEMINI_CLI_HOME");
+        assert_eq!(r.as_deref(), Some("gemini says hi"));
+        assert_eq!(bad, None, "다른 id 는 없음");
+        let _ = fs::remove_dir_all(&gh);
+        let _ = fs::remove_dir_all(&other);
+    }
+
     // D12 S-1628: 프로필 설정 폴더
     #[test]
     fn reads_from_profile_dirs() {
@@ -262,7 +307,7 @@ mod tests {
         let l = serde_json::json!({"type": "event_msg", "payload": {"type": "agent_message", "message": "codex profile"}});
         fs::write(cx.join(format!("rollout-2026-10-24T01-00-00-{ID}.jsonl")), format!("{l}\n")).unwrap();
         assert_eq!(last_reply_dirs("codex", r"C:\work", ID, &home.join(".claude"), &prof).as_deref(), Some("codex profile"));
-        assert_eq!(last_reply_dirs("gemini", REPO, ID, &prof, &prof), None);
+        assert_eq!(last_reply_dirs("grok", REPO, ID, &prof, &prof), None);
         assert_eq!(last_reply("claude", REPO, ID, &prof), None, "홈 기반 꼴은 그대로");
         let _ = fs::remove_dir_all(&prof);
         let _ = fs::remove_dir_all(&home);

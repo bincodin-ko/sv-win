@@ -5,12 +5,13 @@ import { kindsWith } from "../kinds/registry";
 import { SHAPE_CHOICES, type ShapeChoice } from "../shapes/shapeChoices";
 import { tm } from "../../i18n";
 import { TIDY_KEY_LABEL } from "../tidy";
+import { spawnRows } from "./spawnRows";
 import { Item, itemStyle, menuBox, useEscClose, useMenuKeys } from "./menuKit";
 
 // S-045: 빈 캔버스 우클릭 고리. 항목을 누른 지점 둘레 원 위에 놓는다. 1묶음에 있는 항목만
-type Entry = { label: string; run: () => void; extra?: string };
-export default function RadialMenu({ at, onClose, onPlaceKind, onPlaceShape, onSpawn, onSpawnGroup, onPaste, onSelectAll, onFit, onZoom100, onTidy }: {
-  at: { x: number; y: number }; onClose: () => void; onPlaceKind: (kind: string) => void; onPlaceShape: (choice: ShapeChoice) => void; onSpawn: (agentId: string) => void; onSpawnGroup: () => void;
+type Entry = { label: string; run: () => void; extra?: string; why?: string };
+export default function RadialMenu({ at, onClose, onPlaceKind, onPlaceShape, onSpawn, onSpawnInFolder, onSpawnGroup, onPaste, onSelectAll, onFit, onZoom100, onTidy }: {
+  at: { x: number; y: number }; onClose: () => void; onPlaceKind: (kind: string) => void; onPlaceShape: (choice: ShapeChoice) => void; onSpawn: (agentId: string) => void; onSpawnInFolder: () => void; onSpawnGroup: () => void;
   onPaste: () => void; onSelectAll: () => void; onFit: () => void; onZoom100: () => void; onTidy: () => void;
 }) {
   const [sub, setSub] = useState<null | "spawn" | "other" | "more" | "shapes">(null);
@@ -24,7 +25,7 @@ export default function RadialMenu({ at, onClose, onPlaceKind, onPlaceShape, onS
   const hasYours = list.some((a) => a.section === "yours");
   const entries: Entry[] =
     sub === "spawn"
-      ? [...list.filter((a) => a.builtin).map((a) => ({ label: a.name, run: done(() => onSpawn(a.id)) })), ...(hasYours ? [{ label: tm("Other"), run: () => setSub("other") }] : [])]
+      ? [...spawnRows(list).map((r) => ({ label: r.name, why: r.why, run: r.why ? () => {} : done(() => onSpawn(r.id)) })), ...(hasYours ? [{ label: tm("Other"), run: () => setSub("other") }] : []), { label: tm("In folder…"), run: done(onSpawnInFolder) }]
       : sub === "other"
         ? list.filter((a) => a.section === "yours").map((a) => ({ label: a.name, run: done(() => onSpawn(a.id)) }))
       : sub === "shapes"
@@ -38,8 +39,8 @@ export default function RadialMenu({ at, onClose, onPlaceKind, onPlaceShape, onS
       {entries.map((en, i) => {
         const a = (-90 + (360 / entries.length) * i) * (Math.PI / 180);
         return (
-          <Item key={en.label} label={en.label} extra={en.extra} onClick={en.run}
-            style={{ ...itemStyle, position: "absolute", left: 1 + Math.cos(a) * R, top: 1 + Math.sin(a) * R, transform: "translate(-50%,-50%)", width: "auto", whiteSpace: "nowrap", background: "var(--surface)", border: "1px solid var(--bd)", borderRadius: 16, padding: "6px 12px" }} />
+          <Item key={en.label} label={en.label} title={en.why} extra={en.extra} onClick={en.run} data-disabled={en.why ? "true" : undefined}
+            style={{ ...itemStyle, ...(en.why ? { color: "var(--mute)", cursor: "default" } : {}), position: "absolute", left: 1 + Math.cos(a) * R, top: 1 + Math.sin(a) * R, transform: "translate(-50%,-50%)", width: "auto", whiteSpace: "nowrap", background: "var(--surface)", border: "1px solid var(--bd)", borderRadius: 16, padding: "6px 12px" }} />
         );
       })}
     </div>

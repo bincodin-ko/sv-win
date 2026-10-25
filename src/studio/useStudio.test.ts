@@ -33,6 +33,12 @@ describe("S-1803 repo 요구", () => {
     expect(await requestOpenStudio("skills")).toBeNull();
     expect(useUi.getState().studio.open).toBe("skills");
   });
+  it("Hub 보드(hub:<id>)에서는 Code·Markdown·Documents 를 못 연다, Skills 는 연다", async () => {
+    useShell.setState({ activeRepo: "hub:h1" });
+    for (const id of ["code", "markdown", "documents"] as const) expect(await requestOpenStudio(id)).toBe("Open a repo first.");
+    expect(useUi.getState().studio.open).toBeNull();
+    expect(await requestOpenStudio("skills")).toBeNull();
+  });
   it("등록 안 된 스튜디오는 LATER 문구", async () => {
     resetStudios();
     expect(await requestOpenStudio("code")).toBe("That isn't available in this version yet.");

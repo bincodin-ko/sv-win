@@ -4,6 +4,7 @@ import { useT } from "../i18n";
 import { useUi } from "../ui/useUi";
 import { clickConfirm, useConfirm } from "./confirm";
 import Globe from "../voice/Globe";
+import { usePlanner } from "../planner/state";
 import { useThread, type Msg } from "./thread";
 
 const bubble: React.CSSProperties = { maxWidth: "82%", padding: "6px 10px", borderRadius: 12, font: "13px/1.4 system-ui", whiteSpace: "pre-wrap", overflowWrap: "anywhere" };
@@ -40,6 +41,7 @@ function Row({ m }: { m: Msg }) {
 export default function ThreadPanel({ repo }: { repo: string }) {
   const t = useT();
   const msgs = useThread((s) => s.byRepo[repo]) ?? NONE;
+  const busy = usePlanner((s) => (s.busy?.repo === repo ? s.busy.phase : null));
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { end.current?.scrollIntoView?.({ block: "end" }); }, [msgs.length]);
   return (
@@ -53,9 +55,15 @@ export default function ThreadPanel({ repo }: { repo: string }) {
       </div>
       <div style={{ overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
         {msgs.map((m) => <Row key={m.id} m={m} />)}
+        {busy && <div data-testid="planner-busy" style={{ ...bubble, alignSelf: "flex-start", background: "transparent", color: "var(--mute-2)", fontStyle: "italic", border: "1px dashed var(--bd-2)" }}>{busy === "starting" ? t("Starting the planner…") : t("Thinking…")}<Dots /></div>}
         <div ref={end} />
       </div>
     </div>
   );
 }
 const NONE: Msg[] = [];
+
+// 점 세 개가 차례로 깜빡인다
+function Dots() {
+  return <span aria-hidden>{[0, 1, 2].map((i) => <span key={i} style={{ animation: `planner-dot 1.2s ${i * 0.2}s infinite` }}>.</span>)}<style>{"@keyframes planner-dot{0%,60%,100%{opacity:.2}30%{opacity:1}}"}</style></span>;
+}

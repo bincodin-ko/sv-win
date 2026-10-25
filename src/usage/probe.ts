@@ -13,7 +13,7 @@ export const OPEN_MAX_AGE = 30_000; // popover 를 열 때: 30초
 export const CHECK_TIMEOUT = 60_000; // S-1519 추측
 /** 세션을 열어 차례로 입력하는 명령 */
 export const SESSION_CMDS: Record<string, string[]> = {
-  claude: ["/usage"], codex: ["/status", "/usage"], gemini: ["/stats"], kimi: ["/usage"], copilot: ["/usage"],
+  claude: ["/usage"], codex: ["/status", "/usage"], gemini: ["/stats model"], kimi: ["/usage"], copilot: ["/usage"],
 };
 /** 세션 없이 인자로 실행하는 CLI (S-1517 추측) */
 export const EXEC_ARGS: Record<string, string[]> = { amp: ["usage"], opencode: ["stats"] };

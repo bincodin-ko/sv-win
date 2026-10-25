@@ -114,6 +114,11 @@ const table: [string, Intent][] = [
   ["open mission map", { t: "open", what: "mission" }],
   ["open memory", { t: "open", what: "memory" }],
   ["open usage", { t: "open", what: "usage" }],
+  // H2 S-2821
+  ["open conversations", { t: "open", what: "conversations" }],
+  ["conversations", { t: "open", what: "conversations" }],
+  ["all conversations", { t: "open", what: "conversations" }],
+  ["open all conversations", { t: "open", what: "conversations" }],
   ["close that", { t: "closePanel" }],
   // S-586 테마
   ["light mode", { t: "theme", value: "light" }],

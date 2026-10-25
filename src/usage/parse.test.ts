@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseUsage } from "./parse";
+import { parseOpenCodeStats, parseUsage } from "./parse";
 
 // 영상(sheets/node-usage.jpg) 화면 예시를 옮긴 고정 문자열 — 문구는 CLI 가 바뀌면 달라진다(추측)
 const CLAUDE = [
@@ -64,5 +64,69 @@ describe("S-1511·S-1516 알 수 없는 화면은 파싱 실패(raw 만)", () =>
   it("Claude·Codex 가 아닌 CLI 는 해석하지 않는다", () => {
     expect(parseUsage("gemini", CLAUDE)).toBeNull();
     expect(parseUsage("opencode", CODEX)).toBeNull();
+  });
+});
+
+// S-3161 예시 화면 3개 — gemini-cli QuotaStatsInfo.tsx 글 기준의 추측 모양
+const G_ONE = ["Usage limits span all sessions and reset daily.", "34% used (Limit resets in 3h 20m)"].join("\n");
+const G_TWO = [
+  "gemini-2.5-pro     34% used (Limit resets in 3h 20m)",
+  "gemini-2.5-flash   5% used",
+  "                   (Limit resets in 3h 20m)",
+  "Usage limits span all sessions and reset daily.",
+].join("\n");
+const G_FULL = ["gemini-2.5-pro  Limit reached (resets in 2h)", "gemini-2.5-flash  10% used (Limit resets in 2h)"].join("\n");
+
+describe("S-3161 Gemini /stats model 화면", () => {
+  it("모델 이름 없이 34% used + resets -> Daily limit 창 하나", () => {
+    expect(parseUsage("gemini", G_ONE)?.windows).toEqual([{ label: "Daily limit", pct: 34, resetText: "3h 20m" }]);
+  });
+  it("모델이 둘이면 모델마다 창 하나(label = 모델 이름, 리셋은 다음 줄도 본다)", () => {
+    expect(parseUsage("gemini", G_TWO)?.windows).toEqual([
+      { label: "gemini-2.5-pro", pct: 34, resetText: "3h 20m" },
+      { label: "gemini-2.5-flash", pct: 5, resetText: "3h 20m" },
+    ]);
+  });
+  it("Limit reached 줄은 pct 100", () => {
+    expect(parseUsage("gemini", G_FULL)?.windows).toEqual([
+      { label: "gemini-2.5-pro", pct: 100, resetText: "2h" },
+      { label: "gemini-2.5-flash", pct: 10, resetText: "2h" },
+    ]);
+  });
+  it("예시가 아닌 글·옛 /stats 글은 null(원문 보기)", () => {
+    expect(parseUsage("gemini", "Session stats: 12 requests, 3 tool calls")).toBeNull();
+    expect(parseUsage("gemini", "")).toBeNull();
+  });
+});
+
+// S-3162 opencode cli/cmd/stats.ts 304~320줄 모양
+const OC = [
+  "┌────────────────────────────────────────────────────────┐",
+  "│                       OVERVIEW                         │",
+  "├────────────────────────────────────────────────────────┤",
+  "│Sessions                                             12 │",
+  "│Messages                                          1,234 │",
+  "│Days                                                  5 │",
+  "└────────────────────────────────────────────────────────┘",
+  "┌────────────────────────────────────────────────────────┐",
+  "│                    COST & TOKENS                       │",
+  "├────────────────────────────────────────────────────────┤",
+  "│Total Cost                                       $12.34 │",
+  "│Avg Cost/Day                                      $2.47 │",
+  "│Input                                              1.2M │",
+  "│Output                                           45,000 │",
+  "└────────────────────────────────────────────────────────┘",
+].join("\n");
+
+describe("S-3162 OpenCode stats 화면", () => {
+  it("이름 줄의 값을 읽는다(, $ 뗌, K/M/B 곱함)", () => {
+    expect(parseOpenCodeStats(OC)).toEqual({ sessions: 12, messages: 1234, days: 5, cost: 12.34, costPerDay: 2.47, input: 1_200_000, output: 45000 });
+  });
+  it("Input·Output 이 없으면 그 칸만 빠진다", () => {
+    expect(parseOpenCodeStats("│Sessions   3 │\n│Total Cost   $0.50 │")).toEqual({ sessions: 3, cost: 0.5 });
+  });
+  it("하나도 없으면 null", () => {
+    expect(parseOpenCodeStats("hello")).toBeNull();
+    expect(parseOpenCodeStats("")).toBeNull();
   });
 });

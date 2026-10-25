@@ -97,10 +97,13 @@ test("S-045 빈 캔버스 우클릭 고리: Spawn agent 하위 → 콘솔, Paste
   await item(page, "Spawn agent").click();
   for (const n of ["Claude", "Codex", "Gemini", "Grok", "OpenCode", "Shell"]) await expect(item(page, n)).toBeVisible();
   await expect(item(page, "Other")).toHaveCount(0); // 내 에이전트가 없으면 Other 없음
-  await item(page, "Codex").click();
+  await expect(item(page, "Gemini")).toHaveAttribute("data-disabled", "true"); // 미설치는 회색 + 이유(고르기 화면과 같은 규칙)
+  await item(page, "Gemini").click();
+  await expect(ring).toHaveCount(1);
+  await item(page, "Claude").click();
   await expect(ring).toHaveCount(0);
   await expect(consoles(page)).toHaveCount(1);
-  await expect(page.getByTestId("console-badge")).toHaveAttribute("title", "codex");
+  await expect(page.getByTestId("console-badge")).toHaveAttribute("title", "claude");
   // Paste: 방금 만든 콘솔을 복사해 두고 (300,700) 에서 우클릭 → Paste
   await handle(page).click({ position: { x: 300, y: 16 } });
   await page.keyboard.press("Control+c");

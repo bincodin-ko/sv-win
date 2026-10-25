@@ -1,6 +1,7 @@
 // PTY IPC: Tauri 안이면 Rust(pty.rs), 밖(vite dev 브라우저·Playwright·vitest)이면 가짜 PTY
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { fakeGitCall, fakeGitInit } from "../git/fake";
+import type { PiperKind, PiperStatus } from "../voice/piper";
 
 export interface SpawnOpts {
   program?: string; // 비우면 Rust가 %COMSPEC%
@@ -807,19 +808,21 @@ export async function pickSavePath(defaultPath: string, filters: { name: string;
 
 // ---- 6묶음 F1: 음성 엔진 (S-2200~S-2215). 밖에서는 window.__fakeVoice (F2·F3 시험도 씀) ----
 export type VoicePart = { kind: "none" | "downloading" | "ready" | "failed"; pct?: number; why?: string };
-export type VoiceKind = "engine" | "small" | "base";
+export type VoiceKind = "engine" | "small" | "base" | PiperKind;
 export interface FakeVoice {
-  parts: Record<VoiceKind, VoicePart>;
+  parts: Record<"engine" | "small" | "base", VoicePart> & Partial<Record<PiperKind, VoicePart>>; // piper-* 는 12묶음 Q1 (없으면 none)
   calls: { wav: Uint8Array; lang: string; prompt: string; model: string }[];
   downloads: VoiceKind[];
   reply?: string; // 받아쓰기 결과
   error?: string; // 받아쓰기 실패 종류
   hold?: Promise<void>; // 받아쓰기를 잡아 둠(대기 시험)
   failNext?: string; // 다음 내려받기를 이 이유로 실패
+  piperCalls?: { text: string; lang: string }[]; // 12묶음 Q1 piperSpeak 호출 기록
+  piperFail?: string; // 있으면 piperSpeak 가 이 이유로 reject
 }
 const fakeVoice = (): FakeVoice =>
   ((window as unknown as { __fakeVoice?: FakeVoice }).__fakeVoice ??= { parts: { engine: { kind: "none" }, small: { kind: "none" }, base: { kind: "none" } }, calls: [], downloads: [] });
-const modelKind = (m: string): VoiceKind => (m === "base" ? "base" : "small");
+const modelKind = (m: string): "small" | "base" => (m === "base" ? "base" : "small");
 
 /** 엔진과 그 모델의 상태(합치기는 voice/status.ts combine) */
 export async function voiceStatus(model: string): Promise<{ engine: VoicePart; model: VoicePart }> {
@@ -838,7 +841,7 @@ export async function voiceDownload(kind: VoiceKind): Promise<void> {
 export async function voiceCancel(kind: VoiceKind): Promise<boolean> {
   if (isTauri()) return invoke<boolean>("voice_cancel", { kind });
   const f = fakeVoice();
-  const was = f.parts[kind].kind === "downloading";
+  const was = f.parts[kind]?.kind === "downloading";
   if (was) f.parts[kind] = { kind: "none" };
   return was;
 }
@@ -983,4 +986,125 @@ export async function docDelete(repo: string, id: string): Promise<void> {
   const l = fakeLib(repo);
   l.metas = l.metas.filter((m) => m.id !== id);
   delete l.md[id];
+}
+
+// H1 S-2800/S-2811: 모든 대화 목록(Rust conversations_list). 브라우저(시험)는 window.__fakeConvs.
+export type Conversation = {
+  cli: "claude" | "codex";
+  sessionId: string;
+  cwd: string | null;
+  cwdExists: boolean;
+  title: string;
+  firstPrompt: string;
+  lastAt: number;
+  messages: number;
+  profile: string | null;
+};
+export async function conversationsList(force = false): Promise<Conversation[]> {
+  if (isTauri()) return invoke<Conversation[]>("conversations_list", { force });
+  const w = window as unknown as { __convCalls?: number; __fakeConvs?: Conversation[]; __fakeConvsError?: string };
+  w.__convCalls = (w.__convCalls ?? 0) + 1;
+  if (w.__fakeConvsError) throw w.__fakeConvsError;
+  return w.__fakeConvs ?? [];
+}
+
+// 11묶음 P2 S-2968: planner 세션용 빈 폴더(Rust planner_dir). 가짜는 고정 경로
+export const plannerDir = (): Promise<string> => (isTauri() ? invoke<string>("planner_dir") : Promise.resolve("C:\fake\PlannerBox"));
+
+// ---- 12묶음 Q3: Gemini·OpenCode 세션 찾기. 가짜: window.__fakeSessions = { gemini: "id", opencode: "id" } ----
+export async function agentFindSession(agent: string, cwd: string, startedAfterMs: number, claimed: string[]): Promise<string | null> {
+  if (isTauri()) return invoke<string | null>("agent_find_session", { agent, cwd, startedAfterMs, claimed });
+  return (window as unknown as { __fakeSessions?: Record<string, string> }).__fakeSessions?.[agent] ?? null;
+}
+
+// ---- 12묶음 Q1: Piper 로컬 음성 (S-3105·S-3106). 가짜: window.__fakeVoice.parts["piper-*"] · piperCalls · piperFail ----
+const fakePart = (k: PiperKind): VoicePart => fakeVoice().parts[k] ?? { kind: "none" };
+const fakeBoth = (a: PiperKind, b: PiperKind): VoicePart => {
+  const [x, y] = [fakePart(a), fakePart(b)];
+  return x.kind === "failed" ? x : y.kind === "failed" ? y : x.kind === "downloading" ? x : y.kind === "downloading" ? { kind: "downloading", pct: 99 } : x.kind === "ready" && y.kind === "ready" ? x : { kind: "none" };
+};
+/** 엔진과 화면 언어별 음성(onnx + json 둘 다 준비돼야 ready) */
+export async function piperStatus(): Promise<PiperStatus> {
+  if (isTauri()) return invoke<PiperStatus>("piper_status");
+  return { engine: fakePart("piper-engine"), ko: fakeBoth("piper-ko", "piper-ko-json"), en: fakeBoth("piper-en", "piper-en-json") };
+}
+/** 글(200자까지)을 Piper 로 읽은 wav 바이트. 실패는 문자열 종류로 throw: not-ready / timeout / engine / write */
+export async function piperSpeak(text: string, lang: "ko" | "en"): Promise<Uint8Array> {
+  if (isTauri()) return new Uint8Array(await invoke<number[]>("piper_speak", { text, lang }));
+  const f = fakeVoice();
+  (f.piperCalls ??= []).push({ text, lang });
+  if (f.piperFail) throw f.piperFail;
+  return new Uint8Array(44); // 44바이트 빈 wav 머리 크기
+}
+
+// 12묶음 Q5 S-3171: Claude transcript 의 하위 에이전트(Rust claude_subagents_cmd). 브라우저(시험)는 window.__fakeSubagents[sessionId], 호출 수 __fakeSubCalls.
+export type Sub = { id: string; name: string; title: string; state: "running" | "done" | "failed" | "unknown"; startedAt: number; endedAt?: number; agentId?: string; lastAt?: number };
+export async function claudeSubagents(cwd: string, sessionId: string, configDir?: string): Promise<Sub[]> {
+  if (isTauri()) return invoke<Sub[]>("claude_subagents_cmd", { cwd, sessionId, configDir: configDir ?? null });
+  const w = window as unknown as { __fakeSubagents?: Record<string, Sub[]>; __fakeSubCalls?: number };
+  w.__fakeSubCalls = (w.__fakeSubCalls ?? 0) + 1;
+  return w.__fakeSubagents?.[sessionId] ?? [];
+}
+
+// ---- 13묶음 R1: planner API 공급자 (S-3320~S-3343). 키는 Rust(자격 증명 관리자)에만, 웹뷰로 돌려주는 명령 없음.
+// 가짜: window.__fakePlannerApi = { keys, calls, cancels, ask?, models? } (키는 이 메모리 객체에만) ----
+export type ApiErr = { kind: string; status?: number; detail?: string };
+export type PlannerAskArgs = { reqId: string; provider: string; model: string; baseUrl?: string; system: string; user: string; timeoutMs?: number };
+export type FakePlannerApi = {
+  keys: Record<string, string>;
+  calls: Omit<PlannerAskArgs, "timeoutMs">[];
+  cancels: string[];
+  ask?: (a: PlannerAskArgs) => string | { err: ApiErr } | Promise<string | { err: ApiErr }>;
+  models?: (provider: string, baseUrl?: string) => string[] | { err: ApiErr } | Promise<string[] | { err: ApiErr }>;
+  pending?: Record<string, (e: ApiErr) => void>;
+};
+
+const fakeApi = (): FakePlannerApi =>
+  ((window as unknown as { __fakePlannerApi?: FakePlannerApi }).__fakePlannerApi ??= { keys: {}, calls: [], cancels: [] });
+const API_IDS = ["api:openai", "api:anthropic", "api:gemini", "api:compat"];
+
+/** 키는 한 번 넘기고 끝(되돌려 받는 명령 없음). 실패 글에 키 없음 */
+export async function plannerKeySet(provider: string, key: string): Promise<void> {
+  if (isTauri()) return invoke<void>("planner_key_set", { provider, key });
+  const k = key.trim(); // 가짜도 Rust 와 같은 검사 (S-3340)
+  if (!API_IDS.includes(provider) || !k || k.length > 512 || /[\u0000-\u001f\u007f]/.test(k)) throw "invalid key";
+  fakeApi().keys[provider] = k;
+}
+export async function plannerKeyHas(provider: string): Promise<boolean> {
+  if (isTauri()) return invoke<boolean>("planner_key_has", { provider });
+  return provider in fakeApi().keys;
+}
+export async function plannerKeyClear(provider: string): Promise<void> {
+  if (isTauri()) return invoke<void>("planner_key_clear", { provider });
+  delete fakeApi().keys[provider];
+}
+/** 답 글만. 실패는 ApiErr 객체로 reject */
+export async function plannerApiAsk(a: PlannerAskArgs): Promise<string> {
+  if (isTauri()) return invoke<string>("planner_api_ask", { ...a });
+  const f = fakeApi();
+  const { timeoutMs: _t, ...rec } = a;
+  void _t;
+  f.calls.push(rec); // 키는 안 담김
+  const cancelled = new Promise<never>((_, rej) => ((f.pending ??= {})[a.reqId] = (e) => rej(e)));
+  const r = await Promise.race([Promise.resolve(f.ask?.(a)), cancelled]);
+  delete f.pending?.[a.reqId];
+  if (typeof r === "string") return r;
+  throw r && "err" in r ? r.err : ({ kind: "bad" } as ApiErr);
+}
+export async function plannerApiModels(provider: string, baseUrl?: string): Promise<string[]> {
+  if (isTauri()) return invoke<string[]>("planner_api_models", { provider, baseUrl: baseUrl ?? null });
+  const r = await fakeApi().models?.(provider, baseUrl);
+  if (Array.isArray(r)) return r;
+  throw r && "err" in r ? r.err : ({ kind: "bad" } as ApiErr);
+}
+/** 진행 중인 ask 를 끊는다. 가짜는 cancels 에 id 를 쌓고 기다리던 ask 를 cancelled 로 reject */
+export async function plannerApiCancel(reqId: string): Promise<boolean> {
+  if (isTauri()) return invoke<boolean>("planner_api_cancel", { reqId });
+  const f = fakeApi();
+  f.cancels.push(reqId);
+  const rej = f.pending?.[reqId];
+  if (!rej) return false;
+  delete f.pending![reqId];
+  rej({ kind: "cancelled" });
+  return true;
 }

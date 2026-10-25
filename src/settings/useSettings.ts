@@ -13,6 +13,7 @@ export const SETTING_DEFAULTS: Settings = {
   pdfPaper: "letter", pdfDir: "", // E2 S-1844·S-1851
   docsAgent: null, docsEffort: "balanced", // E6 S-1972·S-1973
   lowSpec: false, // 9묶음 저사양 모드
+  planner: "claude", // 11묶음 S-2901
 };
 
 interface SettingsStore {

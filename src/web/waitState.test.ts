@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLocalUrl, MAX_RETRIES, onProbe, type Wait } from "./waitState";
+import { isLocalUrl, MAX_RETRIES, nextDelay, onProbe, type Wait } from "./waitState";
 
 // S-1109: localhost 연결 실패 → 1초 간격 10번 다시 시도 → "Couldn't load". localhost 아닌 주소는 바로 실패. 서버가 뜨면 즉시 로드.
 describe("isLocalUrl", () => {
@@ -34,4 +34,11 @@ describe("waitState (S-1109)", () => {
   it("Retry now = 상태를 null 로 되돌려 처음부터", () => {
     expect(onProbe(null, false, true)).toEqual({ phase: "waiting", tries: 0 });
   });
+});
+describe("nextDelay (perf-real 4)", () => {
+  it("확인에 걸린 시간만큼 덜 기다려 시작 간격이 1초", () => {
+    expect(nextDelay(0, 300)).toBe(700);
+    expect(nextDelay(0, 0)).toBe(1000);
+  });
+  it("1초 넘게 걸렸으면 바로(0)", () => { expect(nextDelay(0, 4000)).toBe(0); });
 });

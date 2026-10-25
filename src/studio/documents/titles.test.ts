@@ -45,16 +45,21 @@ describe("S-1980 진행 시간", () => {
 
 describe("S-1972 에이전트 줄", () => {
   const list = [{ id: "shell", installed: true }, { id: "claude", installed: true }, { id: "codex", installed: false }, { id: "gemini", installed: true }];
-  it("Claude Code·Codex 만(Gemini·Shell 안 보임), 설치 안 된 것도 보이되 installed false(흐림)", () => {
-    expect(agentRow(list, "claude")).toEqual([{ id: "claude", name: "Claude Code", installed: true }, { id: "codex", name: "Codex", installed: false }]);
+  it("Q3 S-3150: Claude Code·Codex 는 늘 보임(미설치는 installed false), 설치된 Gemini 는 그 뒤. Shell 은 안 보임", () => {
+    expect(agentRow(list, "claude")).toEqual([{ id: "claude", name: "Claude Code", installed: true }, { id: "codex", name: "Codex", installed: false }, { id: "gemini", name: "Gemini CLI", installed: true }]);
   });
-  it("기본 에이전트가 둘 중 하나면 맨 앞", () => {
-    expect(agentRow(list, "codex").map((a) => a.id)).toEqual(["codex", "claude"]);
+  it("Q3 S-3150: 미설치 Gemini·OpenCode 는 안 보이고, 설치된 못 읽는 CLI 는 맨 뒤에 installed false + 이유", () => {
+    const l2 = [{ id: "claude", installed: true }, { id: "gemini", installed: false }, { id: "grok", installed: true, name: "Grok" }];
+    expect(agentRow(l2, "claude").map((a) => a.id)).toEqual(["claude", "codex", "grok"]);
+    expect(agentRow(l2, "claude")[2]).toMatchObject({ installed: false, why: "Symvibe can't read Grok's chat history yet" });
   });
-  it("기본 에이전트가 gemini 면 원래 순서(Claude Code, Codex)", () => {
-    expect(agentRow(list, "gemini").map((a) => a.id)).toEqual(["claude", "codex"]);
+  it("기본 에이전트가 claude·codex 중 하나면 맨 앞", () => {
+    expect(agentRow(list, "codex").map((a) => a.id)).toEqual(["codex", "claude", "gemini"]);
   });
-  it("목록에 없는 에이전트는 설치 안 된 것으로 보인다", () => {
+  it("기본 에이전트가 gemini 면 원래 순서", () => {
+    expect(agentRow(list, "gemini").map((a) => a.id)).toEqual(["claude", "codex", "gemini"]);
+  });
+it("목록에 없는 에이전트는 설치 안 된 것으로 보인다", () => {
     expect(agentRow([{ id: "claude", installed: true }], "claude")).toEqual([{ id: "claude", name: "Claude Code", installed: true }, { id: "codex", name: "Codex", installed: false }]);
   });
 });

@@ -1,8 +1,10 @@
 // D13 S-1380~S-1388: Scan repo·Refresh 동작. 패널의 Scan repo 버튼과 행의 Refresh 아이콘이 부른다 (S-1361·S-1363)
 // 상태는 useScan(패널을 닫아도 남음). 숨은 세션 질문·답은 ask.ts, 답 해석은 parseFacts.ts, 프롬프트는 prompts.ts
 import { agentsList, defaultAgent } from "../agents/api";
+import { pickerRows } from "../agents/transcriptSupport";
 import { getStore } from "../board/boards";
 import { t } from "../i18n";
+import { classifyBlock } from "../hidden/detect";
 import type { Clock } from "../hidden/screen";
 import { memorySave, type MemoryFact } from "../lib/ipc";
 import { useSettings } from "../settings/useSettings";
@@ -16,10 +18,12 @@ import { saveError, useMemory } from "./useMemory";
 import { useScan, SCAN_IDLE, type Row, type ScanAgent, type ScanError } from "./useScan";
 
 export const SCAN_TIMEOUT_MS = 600_000; // S-1382
-/** 숨은 세션으로 물을 수 있는 에이전트 (S-0: 5종 중 2종만) */
+/** 숨은 세션으로 물을 수 있는 에이전트 (Q3: 기록을 읽는 4종) */
 export const AGENTS: ScanAgent[] = [
   { id: "claude", label: "Claude Code", name: "Claude" },
   { id: "codex", label: "Codex", name: "Codex" },
+  { id: "gemini", label: "Gemini CLI", name: "Gemini" },
+  { id: "opencode", label: "OpenCode", name: "OpenCode" },
 ];
 type Opts = { clock?: Clock; timeoutMs?: number };
 const set = useScan.setState;
@@ -30,16 +34,17 @@ export function pickAgent(installed: string[], saved: unknown, def: string): str
   return [saved, def].find((x): x is string => typeof x === "string" && installed.includes(x)) ?? installed[0] ?? null;
 }
 async function loadAgents(): Promise<{ agents: ScanAgent[]; agent: string | null }> {
-  const have = new Set((await agentsList()).filter((a) => a.installed).map((a) => a.id));
-  const agents = AGENTS.filter((a) => have.has(a.id));
+  const agents: ScanAgent[] = pickerRows(await agentsList(), []).map((r) => ({ id: r.id, label: r.name, name: AGENTS.find((a) => a.id === r.id)?.name ?? r.name, ...(r.why ? { why: r.why } : {}) }));
   const def = await defaultAgent().catch(() => "");
-  return { agents, agent: pickAgent(agents.map((a) => a.id), useSettings.getState().get().memoryAgent, def) };
+  return { agents, agent: pickAgent(agents.filter((a) => !a.why).map((a) => a.id), useSettings.getState().get().memoryAgent, def) };
 }
 
 function errorOf(e: unknown, agent: string, what: string): ScanError | null {
   if (e instanceof AskError) {
     if (e.reason === "cancelled") return null;
-    if (e.reason === "blocked") return { kind: "blocked", agent, text: t("{name} needs an answer. Open a console of it, answer, and scan again.", { name: nameOf(agent) }) };
+    const b = e.reason === "blocked" ? classifyBlock(e.screen ?? "") : null;
+    if (b?.kind === "permission") return { kind: "permission", text: t("{name} asked for permission to use a tool: {question} Allow it in this repo's Claude permission settings, then scan again.", { name: nameOf(agent), question: b.line }) };
+    if (b) return { kind: "blocked", agent, text: t("{name} needs an answer. Open a console of it, answer, and scan again.", { name: nameOf(agent) }) };
     if (e.reason === "timeout") return { kind: "other", text: what === "scan" ? t("The scan took too long.") : t("The check took too long.") };
   }
   return { kind: "other", text: e instanceof Error ? e.message : String(e) };

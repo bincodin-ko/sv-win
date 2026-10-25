@@ -4,6 +4,9 @@ import { getStore } from "../board/boards";
 import { screenToWorld } from "../board/viewport";
 import { fileCopyInto, fileStat, onFileDrop, type DropPos } from "../lib/ipc";
 import { useShell } from "../shell/useShell";
+import { isHub } from "../shell/hubPath";
+import { showNotice } from "../lib/notice";
+import { t } from "../i18n";
 import DropChoice, { type Choice } from "./DropChoice";
 import { placeAll, prepare } from "./drop";
 import { inRepo } from "./inRepo";
@@ -36,6 +39,7 @@ export default function DropHost() {
       const repo = sh.activeRepo;
       const ws = sh.openRepos.find((r) => r.path === repo)?.activeWs;
       if (sh.view !== "board" || !repo || !ws || !paths.length) return;
+      if (isHub(repo)) return void showNotice(t("Hub boards have no folder — drop files on a repo board")); // H5 S-2877
       const at = worldAt(ws, pos);
       let list = paths;
       const outside = paths.filter((p) => !inRepo(p, repo));

@@ -31,12 +31,12 @@ pub fn file(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn custom_agents_get(app: tauri::AppHandle) -> Result<Vec<CustomAgent>, String> {
+pub async fn custom_agents_get(app: tauri::AppHandle) -> Result<Vec<CustomAgent>, String> {
     Ok(load(&file(&app)?))
 }
 
 #[tauri::command]
-pub fn custom_agents_set(app: tauri::AppHandle, list: Vec<CustomAgent>) -> Result<(), String> {
+pub async fn custom_agents_set(app: tauri::AppHandle, list: Vec<CustomAgent>) -> Result<(), String> {
     save(&file(&app)?, &list)
 }
 

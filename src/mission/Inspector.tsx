@@ -10,6 +10,7 @@ import { confirmDialog } from "../ui/ConfirmDialog";
 import { elapsedMs, fmtElapsed } from "./since";
 import { taskOf } from "./tasks";
 import type { MCard, MConsole, MGroup, MModel } from "./model";
+import { subStateText, type Sub } from "./subagents";
 
 export type Sel = { kind: "con" | "group" | "card"; id: string } | null;
 export const STATE_LABEL = { working: tm("Working"), needs: tm("Needs you"), idle: tm("Idle"), done: tm("Done") } as const;
@@ -22,14 +23,14 @@ const btn = (primary = false, danger = false) => ({ padding: "6px 10px", borderR
 
 type Go = (s: NonNullable<Sel>) => void;
 
-export default function Inspector({ sel, model, wsId, onGo }: { sel: Sel; model: MModel; wsId: string; onGo: Go }) {
+export default function Inspector({ sel, model, wsId, onGo, subs = {} }: { sel: Sel; model: MModel; wsId: string; onGo: Go; subs?: Record<string, Sub[]> }) {
   useT();
   const [, bump] = useReducer((n: number) => n + 1, 0);
   useEffect(() => { const t = setInterval(bump, 1000); return () => clearInterval(t); }, []); // "이 상태로 지낸 시간"
   if (!sel) return <div data-testid="mm-inspector-hint" style={{ ...dim, padding: "12px 0" }}>{t("Click a console, team or card to inspect it.")}</div>;
   if (sel.kind === "con") {
     const c = model.consoles.find((x) => x.id === sel.id);
-    return c ? <ConsoleView c={c} wsId={wsId} onGo={onGo} /> : null;
+    return c ? <ConsoleView c={c} wsId={wsId} onGo={onGo} subs={subs[c.id] ?? []} /> : null;
   }
   if (sel.kind === "group") {
     const g = model.groups.find((x) => x.id === sel.id);
@@ -48,7 +49,7 @@ function Head({ name, sub, color }: { name: string; sub?: string; color?: string
   );
 }
 
-function ConsoleView({ c, wsId, onGo }: { c: MConsole; wsId: string; onGo: Go }) {
+function ConsoleView({ c, wsId, onGo, subs }: { c: MConsole; wsId: string; onGo: Go; subs: Sub[] }) {
   const key = sessionKey(wsId, c.id);
   const s = getSession(wsId, c.id);
   const detail = useLive((l) => l.detail[key]);
@@ -70,6 +71,18 @@ function ConsoleView({ c, wsId, onGo }: { c: MConsole; wsId: string; onGo: Go })
       <div style={row}><span style={dim}>{t("Doing")}</span><span data-testid="mm-doing" style={{ textAlign: "right" }}>{detail || "—"}</span></div>
       <div style={row}><span style={dim}>{t("For")}</span><span data-testid="mm-since">{fmtElapsed(secs)}</span></div>
       <div style={{ ...row, flexDirection: "column", gap: 2 }}><span style={dim}>{t("Task")}</span><span data-testid="mm-task" style={{ wordBreak: "break-word" }}>{task ? task.text.slice(0, 60) : t("No task yet")}</span></div>
+      {subs.length > 0 && (
+        <div data-testid="mm-subs" style={{ marginTop: 8 }}>
+          <div style={dim}>{t("Subagents ({n})", { n: subs.length })}</div>
+          {[...subs].sort((a, b) => b.startedAt - a.startedAt).slice(0, 20).map((x) => (
+            <div key={x.id} data-testid="mm-subs-row" data-state={x.state} style={{ padding: "3px 0", wordBreak: "break-word" }}>
+              <div style={{ fontWeight: 600 }}>{x.name}</div>
+              <div style={dim}>{x.title}</div>
+              <div style={dim}>{subStateText(x, Date.now())} · {new Date(x.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
         <button data-testid="mm-act-goto" style={btn(true)} onClick={() => onGo({ kind: "con", id: c.id })}>{t("Go to the console")}</button>
         {running && !paused && <button data-testid="mm-act-pause" style={btn()} onClick={() => s && pauseSession(s)}>{t("Pause")}</button>}

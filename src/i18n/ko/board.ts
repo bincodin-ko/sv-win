@@ -170,4 +170,13 @@ export default {
   "Ungroup": "그룹 해제",
   "Tidy up": "정리하기",
   "Saved": "저장했어요",
+  "In folder…": "폴더 지정…",
+  "Folder: {path}": "폴더: {path}",
+  // 12묶음 Q5 Mission Map 하위 에이전트
+  "Running {d}": "실행 중 {d}",
+  "Done in {d}": "{d} 만에 완료",
+  "Failed": "실패",
+  "Unknown": "알 수 없음",
+  "+{n} more": "+{n}개 더",
+  "Subagents ({n})": "하위 에이전트 ({n})",
 } as Record<string, string>;

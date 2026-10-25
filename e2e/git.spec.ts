@@ -52,7 +52,7 @@ test.describe("pill·열기·닫기 (S-1020·S-1021)", () => {
   test("Tools › GitHub 로 열린다", async ({ page }) => {
     await boot(page, { files: FILES });
     await t(page, "tools-btn").click();
-    await expect(page.getByRole("menuitem")).toHaveText(["Presets", "GitHub", "Code", "Markdown", "Mission Map", "Memory", "Skills", "Loops", "Settings"]); // S-1231 순서 + E4·E5·E7 Code·Markdown·Skills (ToolsMenu.tsx)
+    await expect(page.getByRole("menuitem")).toHaveText(["All conversations", "Presets", "GitHub", "Code", "Markdown", "Mission Map", "Memory", "Skills", "Loops", "Settings"]); // S-1231 순서 + E4·E5·E7 Code·Markdown·Skills (ToolsMenu.tsx)
     await page.getByRole("menuitem", { name: "GitHub" }).click();
     await expect(panel(page)).toBeVisible();
   });

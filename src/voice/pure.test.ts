@@ -110,6 +110,18 @@ describe("S-2210 snapNames", () => {
     expect(h).toContain("Bex");
     expect(h).toContain("spawn");
   });
+  it("promptHint: 에이전트 이름이 'close' 같은 일반 명령 낱말보다 앞 (whisper 가 claude 를 close 로 듣던 버그)", () => {
+    const h = promptHint([]);
+    expect(h).toContain("Claude Code");
+    expect(h.indexOf("Claude Code")).toBeLessThan(h.indexOf("close") < 0 ? 1e9 : h.indexOf("close"));
+    for (const n of ["Codex", "Gemini"]) expect(h.indexOf(n)).toBeGreaterThanOrEqual(0);
+    expect(promptHint(["Otto"]).split(", ")[0]).toBe("Claude Code");
+  });
+  it("promptHint: 한국어면 한국어 힌트", () => {
+    const h = promptHint([], VOCAB, "ko");
+    for (const w of ["클로드", "코덱스", "제미나이", "띄워", "그룹"]) expect(h).toContain(w);
+    expect(promptHint([], VOCAB, "en")).not.toContain("클로드");
+  });
 });
 
 describe("S-2211 언어", () => {

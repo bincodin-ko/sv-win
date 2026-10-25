@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ConfirmCloseHost } from "../console/ConfirmClose";
 import { getSession, requestClose } from "../console/session";
+import { requestHistory } from "./guardedHistory";
+import { closeMax, toggleMax, useMax } from "../console/maximize";
+import { sessionKey } from "../console/sessionKey";
+import { isImeEvent } from "../commandbar/ime";
 import ConsoleNode from "./ConsoleNode";
 import NodeFrame from "./kinds/NodeFrame";
 import Unsupported from "./kinds/Unsupported";
@@ -27,12 +31,16 @@ import { useSettings } from "../settings/useSettings";
 import NodeMenu from "./menus/NodeMenu";
 import RunCard from "../diagrams/RunCard";
 import { placeShape } from "./shapes/place";
+import { pickFolder } from "../lib/ipc";
+import { defaultAgent } from "../agents/api";
 import RadialMenu from "./menus/RadialMenu";
 import LeftRail from "./rail/LeftRail";
 import SpawnFlyout from "./rail/SpawnFlyout";
 import { arrowDelta, bounds, boxSelect, clickSelect, normBox, type Rect } from "./selection";
 import SelectionBox from "./SelectionBox";
 import { useScope } from "./BoardScope";
+import { isHub } from "../shell/hubPath";
+import { useShell } from "../shell/useShell";
 import type { BoardStore } from "./boards";
 import { isConsole } from "./store";
 import RightRail from "./rail/RightRail";
@@ -82,6 +90,10 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
   const pend = useRef<View | null>(null); // 휠이 쌓은, 아직 저장소에 안 넣은 뷰포트(rAF 당 1번 반영)
   const applyView = useRef<(v: View, gesture: boolean) => void>(() => {});
   const nodes = useBoard((s) => s.nodes);
+  const maxKey = useMax((s) => s.key);
+  const maxId = maxKey && JSON.parse(maxKey)[0] === wsId && nodes[JSON.parse(maxKey)[1]] ? (JSON.parse(maxKey)[1] as string) : null; // 1-4: 크게 보는 콘솔
+  const maxRef = useRef<string | null>(null);
+  maxRef.current = maxId;
   const groups = useBoard((s) => s.groups) ?? [];
   const selection = useBoard((s) => s.selection);
   const [guides, setGuides] = useState<Seg[]>([]);
@@ -98,7 +110,7 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
     let timer: ReturnType<typeof setTimeout> | undefined;
     const mod = (a: number, n: number) => ((a % n) + n) % n;
     const apply = (v: View, gesture: boolean) => {
-      w.style.transform = `translate(${v.x}px, ${v.y}px) scale(${v.zoom})`;
+      w.style.transform = maxRef.current ? "none" : `translate(${v.x}px, ${v.y}px) scale(${v.zoom})`; // 크게 보기: transform 이 있으면 fixed 가 보드 안에 갇힌다
       if (g) { // 격자 층: 한 칸씩 크게 잡고 팬은 translate 만(다시 칠하지 않고 합성만). 크기는 줌이 바뀔 때만 달라진다
         const s = GRID * v.zoom;
         g.style.left = g.style.top = `${-s}px`;
@@ -124,6 +136,25 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
     });
     return () => { un(); clearTimeout(timer); };
   }, [useBoard, low]);
+  useLayoutEffect(() => { applyView.current(useBoard.getState().viewport, false); }, [maxId, useBoard]);
+  useEffect(() => { if (maxKey && JSON.parse(maxKey)[0] === wsId && !nodes[JSON.parse(maxKey)[1]]) closeMax(); }, [maxKey, wsId, nodes]); // 크게 보던 콘솔이 지워지면 해제
+  // 1-4: Ctrl+Shift+Enter = 선택(또는 포커스) 콘솔 크게/복귀, Esc = 복귀(터미널 안에서 누른 Esc 는 프로그램 몫이라 건드리지 않는다)
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (!visibleRef.current || isImeEvent(e)) return;
+      const st = useBoard.getState();
+      if (e.key === "Escape" && maxRef.current && !e.ctrlKey && !e.altKey && !e.metaKey && !overlayOpen() && !(e.target as Element | null)?.closest?.(".xterm")) {
+        e.preventDefault(); e.stopPropagation(); closeMax(); return;
+      }
+      if (e.key !== "Enter" || !e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey || overlayOpen()) return;
+      const inNode = (e.target as Element | null)?.closest?.("[data-node-id]") as HTMLElement | null;
+      const id = maxRef.current ?? (inNode?.dataset.nodeId && isConsole(st.nodes[inNode.dataset.nodeId]) ? inNode.dataset.nodeId : st.selection.length === 1 && isConsole(st.nodes[st.selection[0]!]) ? st.selection[0] : null);
+      if (!id) return;
+      e.preventDefault(); e.stopPropagation(); toggleMax(sessionKey(wsId, id));
+    };
+    window.addEventListener("keydown", on, true);
+    return () => window.removeEventListener("keydown", on, true);
+  }, [useBoard, wsId]);
   useEffect(() => void useBoard.getState().loadPrefs(), []);
   // S-1225·S-1237: 탭 전환(숨김)·카드 삭제가 연결 모드를 끝낸다
   const connect = useUi((s) => s.connect);
@@ -162,10 +193,10 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
     };
     // A6 편집 키(S-022~S-031). 처리했으면 true
     const editKey = (e: KeyboardEvent): boolean => {
-      const { nodes, selection: sel, copy, duplicate, undo, redo, select, moveBy, tool, setTool } = st();
+      const { nodes, selection: sel, copy, duplicate, select, moveBy, tool, setTool } = st();
       if (e.ctrlKey && !e.altKey && !e.metaKey) {
         const k = boardKey(e).toLowerCase();
-        if (k === "z") return (e.shiftKey ? redo() : undo()), true;
+        if (k === "z") return void requestHistory(e.shiftKey ? "redo" : "undo", sc), true;
         if (k === "g") { // B7 S-500·S-501: 묶기 / 해체
           if (!e.shiftKey) return st().createGroup(sel), true;
           for (const g of new Set(sel.flatMap((id) => { const n = nodes[id]; return isConsole(n) && n.groupId ? [n.groupId] : []; }))) st().dissolveGroup(g);
@@ -174,7 +205,7 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
         if (k === TIDY_KEY.key && e.shiftKey === TIDY_KEY.shift) return tidyBoard(useBoard), true; // U3 S-2647: 콘솔 안에서는 boardHasKeyboard 가 막는다
         if (e.shiftKey) return false;
         if (k === "s") return void flushAll().then(() => showNotice(tt("Saved"), 2000)).catch(() => {}), true; // U3 S-2649
-        if (k === "y") return redo(), true;
+        if (k === "y") return void requestHistory("redo", sc), true;
         if (k === "a") return select(Object.keys(nodes)), true;
         if (k === "c") return copy(sel), true;
         if (k === "x") return copy(sel), sel.length > 0 && void requestClose(sel, sc), true;
@@ -209,6 +240,7 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
       if (route === "toConsole" && e.code === "Space" && useSettings.getState().s.holdSpace !== false) return; // F3 S-2260: Space 는 음성(톡 치면 아무 일도 없음)
       if (route === "toConsole") return void el.querySelector<HTMLElement>(`[data-node-id="${sel[0]}"] .xterm-helper-textarea`)?.focus();
       if (route === "needsYou") return void (jumpToNext() && e.preventDefault()); // B16 S-689
+      if (isHub(useShell.getState().activeRepo) && ["git", "memory", "loops", "skills", "markdown"].includes(route)) return; // H5 S-2876: 폴더 없는 Hub 는 route 로 막는다(키는 바꿀 수 있다)
       if (route === "git") return (useUi.getState().gitOpen ? useUi.getState().closeGit() : useUi.getState().openGit()), e.preventDefault();
       if (route === "memory" || route === "loops") return useUi.getState()[route === "memory" ? "toggleMemory" : "toggleLoops"](), e.preventDefault();
       if (route === "skills" || route === "markdown") return void openStudioByKey(route), e.preventDefault(); // S-1806: 못 열면 이유를 스레드에 남긴다
@@ -430,7 +462,7 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
             data-selected={selection.includes(n.id)}
             {...(wiredNow.has(n.id) ? { "data-wired": "true" } : {})}
             onDoubleClick={(e) => !(e.target as Element).closest("input, textarea, [contenteditable]") && (ref.current as any).__fit({ x: n.x, y: n.y, w: n.w, h: n.h })}
-            style={{ position: "absolute", left: n.x, top: n.y, width: n.w, height: n.h, zIndex: n.z, pointerEvents: getKind(n.kind)?.hitShape ? "none" : undefined, outline: wiredNow.has(n.id) ? "3px solid var(--accent)" : selection.includes(n.id) ? "2px solid var(--accent)" : undefined, outlineOffset: 2, borderRadius: 10 }}
+            style={{ position: "absolute", left: n.x, top: n.y, width: n.w, height: n.h, zIndex: n.z, ...(maxId === n.id ? { position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", zIndex: 9700 } : null), pointerEvents: getKind(n.kind)?.hitShape ? "none" : undefined, outline: maxId === n.id ? "none" : wiredNow.has(n.id) ? "3px solid var(--accent)" : selection.includes(n.id) ? "2px solid var(--accent)" : undefined, outlineOffset: 2, borderRadius: 10 }}
           >
             {renderNode?.(n.id) ?? (n.kind === "console" ? <ConsoleNode id={n.id} /> : kindDef(n.kind) ? <KindBody kind={n.kind} id={n.id} /> : <Unsupported kind={n.kind} />)}
             {selection.includes(n.id) && getKind(n.kind)?.resizable && <NodeFrame id={n.id} def={getKind(n.kind)!} />}
@@ -449,6 +481,7 @@ export default function Board({ renderNode }: { renderNode?: (id: string) => Rea
           onPlaceKind={(k) => void placeNew(useBoard, k, undefined, menu.world)}
           onPlaceShape={(c) => placeShape(useBoard, c, menu.world)}
           onSpawn={(id) => useBoard.getState().spawnAgent(id, menu.world)}
+          onSpawnInFolder={() => void pickFolder().then(async (cwd) => { if (cwd) { const st = useBoard.getState(); st.spawnAgent(st.armedAgent ?? (await defaultAgent()), menu.world, { cwd }); } })}
           onSpawnGroup={() => useUi.getState().openComposer(6, { at: menu.at, world: menu.world })}
           onPaste={() => useBoard.getState().paste(menu.world)}
           onSelectAll={() => useBoard.getState().select(Object.keys(useBoard.getState().nodes))}

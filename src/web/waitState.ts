@@ -10,3 +10,8 @@ export function onProbe(w: Wait | null, reachable: boolean, local: boolean): Wai
   const tries = w ? w.tries + 1 : 0;
   return { phase: tries >= MAX_RETRIES ? "failed" : "waiting", tries };
 }
+export const WAIT_MS = 1000;
+/** 다음 확인까지 기다릴 시간 — 확인에 걸린 시간을 빼서 시작 간격이 1초가 되게 한다 */
+export function nextDelay(startedAt: number, now: number): number {
+  return Math.max(0, WAIT_MS - (now - startedAt));
+}

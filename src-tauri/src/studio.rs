@@ -397,19 +397,19 @@ pub async fn studio_vault(root: String, max: usize) -> Result<VaultOut, String> 
     super::vault(Path::new(&root), max)
 }
 #[tauri::command]
-pub fn studio_memory_dir(repo: String, config_dir: Option<String>) -> String {
+pub async fn studio_memory_dir(repo: String, config_dir: Option<String>) -> String {
     super::memory_dir(&super::claude_dir(config_dir.as_deref()), &repo).to_string_lossy().into_owned()
 }
 #[tauri::command]
-pub fn draft_put(app: AppHandle, path: String, text: String, base_mtime: u64) -> Result<(), String> {
+pub async fn draft_put(app: AppHandle, path: String, text: String, base_mtime: u64) -> Result<(), String> {
     super::draft_put(&drafts_dir(&app)?, &path, &text, base_mtime)
 }
 #[tauri::command]
-pub fn draft_get(app: AppHandle, path: String) -> Result<Option<Draft>, String> {
+pub async fn draft_get(app: AppHandle, path: String) -> Result<Option<Draft>, String> {
     Ok(super::draft_get(&drafts_dir(&app)?, &path))
 }
 #[tauri::command]
-pub fn draft_clear(app: AppHandle, path: String) -> Result<(), String> {
+pub async fn draft_clear(app: AppHandle, path: String) -> Result<(), String> {
     super::draft_clear(&drafts_dir(&app)?, &path)
 }
 }

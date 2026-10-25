@@ -9,6 +9,7 @@ const RESET = /\bresets?\s+(?:at\s+)?([^()]+?)\s*(?:\([^)]*\))?\s*\)?\s*$/i;
 const LOOK = 4; // 이름 줄 아래 몇 줄까지 퍼센트·리셋을 찾는가
 
 export function parseUsage(agent: string, text: string): Parsed | null {
+  if (agent === "gemini") return parseGemini(text);
   if (agent !== "claude" && agent !== "codex") return null;
   const lines = text.split("\n");
   const windows: Win[] = [];
@@ -24,4 +25,39 @@ export function parseUsage(agent: string, text: string): Parsed | null {
     windows.push({ label: m[1]!.trim(), pct: p[2]?.toLowerCase() === "left" ? 100 - n : n, resetText: reset?.[1]?.trim() ?? null });
   }
   return windows.length ? { windows } : null;
+}
+
+// S-3161: Gemini `/stats model` — `NN% used (Limit resets in …)`. 옛 `/stats` 글(% used 없음)과 Claude 글(곁글 없음)은 null
+const G_PCT = /(\d{1,3})\s*%\s*used/i;
+const G_MODEL = /\bgemini-[\w.-]+/i;
+const G_RESET = /resets in\s+([^)\n]+)/i;
+function parseGemini(text: string): Parsed | null {
+  const lines = text.split("\n");
+  const ok = G_PCT.test(text) && /Limit resets in|Usage limits span|gemini-/i.test(text);
+  const windows: Win[] = [];
+  lines.forEach((l, i) => {
+    const used = ok ? G_PCT.exec(l) : null;
+    const reached = !used && /limit reached/i.test(l) && G_MODEL.test(l);
+    if (!used && !reached) return;
+    const prev = lines[i - 1] ?? "";
+    const next = lines[i + 1] ?? "";
+    const label = G_MODEL.exec(l)?.[0] ?? (G_PCT.test(prev) ? null : G_MODEL.exec(prev)?.[0]) ?? "Daily limit";
+    const reset = G_RESET.exec(l) ?? (G_PCT.test(next) ? null : G_RESET.exec(next));
+    windows.push({ label, pct: used ? Math.min(100, +used[1]!) : 100, resetText: reset?.[1]?.trim() ?? null });
+  });
+  return windows.length ? { windows } : null;
+}
+
+export interface OpenCodeStats { sessions?: number; messages?: number; days?: number; cost?: number; costPerDay?: number; input?: number; output?: number }
+const OC_ROW = /^[│|]?\s*(Sessions|Messages|Days|Total Cost|Avg Cost\/Day|Input|Output)\s+\$?([\d,]+(?:\.\d+)?)\s*([KMB])?\s*[│|]?\s*$/;
+const OC_KEY = { Sessions: "sessions", Messages: "messages", Days: "days", "Total Cost": "cost", "Avg Cost/Day": "costPerDay", Input: "input", Output: "output" } as const;
+const OC_MUL = { K: 1e3, M: 1e6, B: 1e9 };
+/** S-3162: opencode stats 의 `│이름   값 │` 줄들. 하나도 없으면 null */
+export function parseOpenCodeStats(text: string): OpenCodeStats | null {
+  const out: OpenCodeStats = {};
+  for (const l of text.split("\n")) {
+    const m = OC_ROW.exec(l.trim());
+    if (m) out[OC_KEY[m[1] as keyof typeof OC_KEY]] = +m[2]!.replace(/,/g, "") * (m[3] ? OC_MUL[m[3] as "K"] : 1);
+  }
+  return Object.keys(out).length ? out : null;
 }

@@ -176,6 +176,7 @@ test("S-026 Ctrl+D 복제: 원본 +24,+24, 새 이름, 새 가짜 PTY(같은 에
   expect([b1!.x - b0.x, b1!.y - b0.y]).toEqual([24, 24]);
   await expect(page.getByTestId("console-badge")).toHaveText(["C", "C"]);
   await page.keyboard.press("Control+z"); // 복제 되돌리기 = 복제본 사라짐
+  await page.getByTestId("confirm-close").getByRole("button", { name: "Close" }).click(); // 실행 중 복제본이라 확인창(되돌리기 확인)
   await expect(page.getByTestId("console")).toHaveCount(1);
 });
 

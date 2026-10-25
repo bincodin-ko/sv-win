@@ -51,28 +51,44 @@ fn host_port(url: &str) -> Option<(String, u16)> {
 }
 
 fn tcp_ok(host: &str, port: u16, timeout: Duration) -> bool {
-    (host, port).to_socket_addrs().is_ok_and(|mut a| a.any(|ad| TcpStream::connect_timeout(&ad, timeout).is_ok()))
+    // 주소가 여러 개(::1·127.0.0.1)면 동시에 시도 — 앞 주소의 거절 대기가 뒤 주소 시간을 먹지 않게
+    let addrs: Vec<_> = (host, port).to_socket_addrs().map(|a| a.collect()).unwrap_or_default();
+    std::thread::scope(|s| {
+        let hs: Vec<_> = addrs.iter().map(|ad| s.spawn(move || TcpStream::connect_timeout(ad, timeout).is_ok())).collect();
+        hs.into_iter().any(|h| h.join().unwrap_or(false))
+    })
 }
 
-#[tauri::command]
-pub fn web_ports(ports: Vec<u16>) -> Vec<bool> {
+/// 이 주소로 연결이 되는지 볼 때 기다리는 시간(밀리초). 메인 스레드를 막던 3~5초를 줄인다
+pub const CONNECT_MS: u64 = 300;
+
+pub fn ports_open(ports: Vec<u16>) -> Vec<bool> {
     std::thread::scope(|s| {
-        let hs: Vec<_> = ports.iter().map(|&p| s.spawn(move || tcp_ok("127.0.0.1", p, Duration::from_millis(300)))).collect();
+        let hs: Vec<_> = ports.iter().map(|&p| s.spawn(move || tcp_ok("127.0.0.1", p, Duration::from_millis(CONNECT_MS)))).collect();
         hs.into_iter().map(|h| h.join().unwrap_or(false)).collect()
     })
 }
 
 #[tauri::command]
-pub fn web_probe(url: String) -> Result<WebProbe, String> {
-    check_http(&url)?;
-    let (host, port) = host_port(&url).ok_or("잘못된 주소")?;
+pub async fn web_ports(ports: Vec<u16>) -> Vec<bool> {
+    tauri::async_runtime::spawn_blocking(move || ports_open(ports)).await.unwrap_or_default()
+}
+
+#[tauri::command]
+pub async fn web_probe(url: String) -> Result<WebProbe, String> {
+    tauri::async_runtime::spawn_blocking(move || probe(&url)).await.map_err(|e| e.to_string())?
+}
+
+pub fn probe(url: &str) -> Result<WebProbe, String> {
+    check_http(url)?;
+    let (host, port) = host_port(url).ok_or("잘못된 주소")?;
     let local = matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1");
-    if !tcp_ok(&host, port, Duration::from_secs(if local { 3 } else { 5 })) {
+    if !tcp_ok(&host, port, Duration::from_millis(if local { CONNECT_MS } else { 3000 })) {
         return Ok(WebProbe { reachable: false, frame_blocked: false, status: None });
     }
     // 헤더를 못 읽어도(curl 없음·시간 초과) 연결은 된 것
     let mut cmd = Command::new("curl.exe");
-    cmd.args(["-sI", "-L", "--max-redirs", "3", "-m", "5", &url]);
+    cmd.args(["-sI", "-L", "--max-redirs", "3", "-m", "5", url]);
     let out = run_timeout(&mut cmd, Duration::from_secs(7)).filter(|(ok, _)| *ok).map(|(_, t)| t).unwrap_or_default();
     // -L 이면 헤더 묶음이 여러 개 — 마지막 응답만 본다
     let last = out.replace("\r\n", "\n").split("\n\n").filter(|b| b.contains("HTTP/")).last().unwrap_or("").to_string();
@@ -100,7 +116,7 @@ pub async fn web_window_open(app: AppHandle, id: String, url: String) -> Result<
 }
 
 #[tauri::command]
-pub fn web_window_close(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn web_window_close(app: AppHandle, id: String) -> Result<(), String> {
     match app.get_webview_window(&window_label(&id)) {
         Some(w) => w.destroy().map_err(|e| e.to_string()),
         None => Ok(()),
@@ -134,7 +150,7 @@ mod tests {
     fn web_ports_open_and_closed() {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let open = l.local_addr().unwrap().port();
-        assert_eq!(web_ports(vec![open, free_port()]), vec![true, false]);
+        assert_eq!(ports_open(vec![open, free_port()]), vec![true, false]);
     }
 
     /// 접속마다 정해진 응답을 주는 임시 서버(최대 8번). 포트를 돌려준다
@@ -154,9 +170,9 @@ mod tests {
     #[test]
     fn web_probe_reachable_and_closed() {
         let port = serve("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        let p = web_probe(format!("http://localhost:{port}/")).unwrap();
+        let p = probe(&format!("http://localhost:{port}/")).unwrap();
         assert!(p.reachable);
-        let q = web_probe(format!("http://127.0.0.1:{}/", free_port())).unwrap();
+        let q = probe(&format!("http://127.0.0.1:{}/", free_port())).unwrap();
         assert_eq!(q, WebProbe { reachable: false, frame_blocked: false, status: None });
     }
 
@@ -164,15 +180,29 @@ mod tests {
     #[test]
     fn web_probe_reads_frame_header() {
         let port = serve("HTTP/1.1 200 OK\r\nX-Frame-Options: DENY\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        let p = web_probe(format!("http://127.0.0.1:{port}/")).unwrap();
+        let p = probe(&format!("http://127.0.0.1:{port}/")).unwrap();
         assert!(p.reachable && p.frame_blocked);
         assert_eq!(p.status, Some(200));
     }
 
+    // perf-real 3: 없는 포트가 4초 걸려 IPC 전체를 막았다 → 0.5초 안에 끝나야 한다
+    #[test]
+    fn web_probe_closed_port_is_fast() {
+        for host in ["localhost", "127.0.0.1"] {
+            let t = std::time::Instant::now();
+            let q = probe(&format!("http://{host}:{}/", free_port())).unwrap();
+            assert!(!q.reachable);
+            assert!(t.elapsed() <= Duration::from_millis(500), "{host}: {:?}", t.elapsed());
+        }
+    }
+
+    #[test]
+    fn connect_timeout_is_short() { assert_eq!(CONNECT_MS, 300); }
+
     #[test]
     fn rejects_non_http() {
-        assert!(web_probe("file:///C:/x".into()).is_err());
-        assert!(web_probe("ftp://example.com".into()).is_err());
-        assert!(web_probe("javascript:alert(1)".into()).is_err());
+        assert!(probe("file:///C:/x").is_err());
+        assert!(probe("ftp://example.com").is_err());
+        assert!(probe("javascript:alert(1)").is_err());
     }
 }

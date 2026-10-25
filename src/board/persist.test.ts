@@ -245,6 +245,18 @@ describe("앱 시작 흐름 (S-324: 홈 화면이 S-208 선택창을 대체)", (
     expect(spies.dirExists).toHaveBeenCalledWith("C:/work/app");
   });
 
+  // H5 S-2874
+  it("lastRepo 가 hub:<id> 이고 hubs 에 있으면 폴더 확인 없이 그 Hub 보드를 연다", async () => {
+    const { io, spies } = mk({ repos: [repo], lastRepo: "hub:h1", hubs: [{ id: "h1", name: "Hub 1" }] } as Repos, false);
+    expect(await startWorkspace(io, on)).toEqual({ kind: "board", ws: { id: "h1", name: "Hub 1", repoPath: "hub:h1" } });
+    expect(spies.dirExists).not.toHaveBeenCalled();
+  });
+
+  it("lastRepo 가 hub:<id> 인데 hubs 에 없으면 홈", async () => {
+    const { io } = mk({ repos: [repo], lastRepo: "hub:gone", hubs: [] } as Repos, false);
+    expect(await startWorkspace(io, on)).toEqual({ kind: "home" });
+  });
+
   it("reopen 꺼짐이면 폴더가 있어도 홈, 선택창 없음", async () => {
     const { io, pickFolder } = mk({ repos: [repo], lastRepo: "C:/work/app" }, true);
     expect(await startWorkspace(io, { reopenLastRepo: false })).toEqual({ kind: "home" });

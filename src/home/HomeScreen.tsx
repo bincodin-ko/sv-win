@@ -3,11 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Repos } from "../board/persist";
 import { useSettings } from "../settings/useSettings";
 import { useShell, openRepo, removeRepo } from "../shell/useShell";
-import { homeHooks } from "../shell/workspaces";
+import { createHub, homeHooks, openHub, removeHub } from "../shell/workspaces";
 import { confirmDialog } from "../ui/ConfirmDialog";
-import { openSettings } from "../ui/useUi";
+import { openSettings, useUi } from "../ui/useUi";
 import { dirExists, onFolderDrop, pickFolder, repoBranch, reposGet, reposSet } from "../lib/ipc";
 import AddRepoCard from "./AddRepoCard";
+import HubList from "./HubList";
 import ComposeBar from "./ComposeBar";
 import FirstRunCard from "../firstrun/FirstRunCard";
 import { shouldShow } from "../firstrun/steps";
@@ -94,6 +95,13 @@ export default function HomeScreen() {
     setSel(next.repos[Math.min(i, next.repos.length - 1)]?.path ?? null);
   };
 
+  const removeHubAsk = async (h: { id: string; name: string }) => {
+    const ok = await confirmDialog({ title: t("Remove {name}? Its consoles close.", { name: h.name }), confirmLabel: t("Remove"), danger: true });
+    if (!ok) return;
+    await removeHub(h.id);
+    setData(await reposGet());
+  };
+
   // S-322: ↑↓ 이동, Return 열기, Delete 제거, Ctrl+O 폴더 추가(앱 키 S-342 가 homeHooks 로 부른다). 확인창·설정이 떠 있거나 입력·버튼에 포커스가 있으면 비킨다.
   // 리스너는 한 번만 달고 최신 상태는 ref 로 읽는다(목록이 막 뜬 순간의 키가 옛 상태를 보지 않게)
   const latest = useRef({ repos, sel, open, remove });
@@ -125,6 +133,7 @@ export default function HomeScreen() {
   return (
     <div data-testid="home" style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg)", color: "var(--text)", overflow: "auto" }}>
       <div style={{ alignSelf: "stretch", display: "flex", justifyContent: "flex-end", gap: 4, padding: 12 }}>
+        <button data-testid="home-conversations" aria-label={t("All conversations")} title={t("All conversations")} onClick={() => useUi.getState().openConversations()} style={iconBtn}>💬</button>
         <button data-testid="theme-toggle" aria-label={t("Toggle theme")} title="OG / Light" onClick={toggleTheme} style={iconBtn}>◐</button>
         <button data-testid="home-settings" aria-label={t("Settings")} title={t("Settings (Ctrl+,)")} onClick={() => openSettings()} style={iconBtn}>⚙</button>
       </div>
@@ -146,6 +155,7 @@ export default function HomeScreen() {
           />
         )}
         <AddRepoCard onAdd={() => void pickAndAdd()} />
+        <HubList hubs={data?.hubs ?? []} onNew={() => void createHub()} onOpen={openHub} onRemove={(h) => void removeHubAsk(h)} />
       </div>
       <div style={{ flex: 1 }} />
       <div style={{ width: "min(640px, calc(100% - 48px))", padding: "0 0 24px" }}>

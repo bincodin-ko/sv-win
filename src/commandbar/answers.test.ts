@@ -37,6 +37,10 @@ describe("S-614·S-617 고정 문구", () => {
     for (const w of ["open documents", "open code", "open markdown", "open skills"]) expect(HELP_TEXT.toLowerCase()).toContain(w); // S-1809
     for (const w of ["orchestrator", "every 10 minutes", "open memory", "pass this task to codex"]) expect(HELP_TEXT.toLowerCase()).toContain(w); // S-1731
   });
+  it("S-2985 help 마지막 줄은 planner 안내", () => {
+    expect(HELP_TEXT.split("\n").at(-1)).toBe("• anything else — the planner reads it (Settings > Planner)");
+    expect(HELP_TEXT.split("\n")).toHaveLength(18);
+  });
   it("later·unavailable·needsPlanner·smallTalk", () => {
     expect(LATER_TEXT).toBe("That isn't available in this version yet.");
     expect(NEEDS_PLANNER_TEXT).toBe("I couldn't read that without the planner. Start with who it is for, like @Otto run the tests");

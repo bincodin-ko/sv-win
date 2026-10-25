@@ -56,20 +56,34 @@ pub fn file(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 
 /// D10 S-1517: 사용량 확인용 빈 폴더 %APPDATA%/com.symvibe.win/UsageProbe (없으면 만든다)
 #[tauri::command]
-pub fn usage_probe_dir(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn usage_probe_dir(app: tauri::AppHandle) -> Result<String, String> {
     use tauri::Manager;
     let d = app.path().app_data_dir().map_err(|e| e.to_string())?.join("UsageProbe");
     std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     Ok(d.to_string_lossy().into_owned())
 }
 
+/// 11묶음 P2 S-2968: planner 세션용 빈 폴더 <base>/PlannerBox (없으면 만든다)
+pub fn planner_path(base: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let d = base.join("PlannerBox");
+    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    Ok(d)
+}
+
 #[tauri::command]
-pub fn settings_get(app: tauri::AppHandle) -> Result<Settings, String> {
+pub async fn planner_dir(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    let d = planner_path(&app.path().app_data_dir().map_err(|e| e.to_string())?)?;
+    Ok(d.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn settings_get(app: tauri::AppHandle) -> Result<Settings, String> {
     Ok(load(&file(&app)?))
 }
 
 #[tauri::command]
-pub fn settings_set(
+pub async fn settings_set(
     app: tauri::AppHandle,
     cache: tauri::State<'_, crate::agents::cmds::AgentCache>,
     patch: Settings,
@@ -93,6 +107,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn planner_dir_creates_box() {
+        let base = tmp("planner");
+        let d = planner_path(&base).unwrap();
+        assert!(d.is_dir());
+        assert!(d.ends_with("PlannerBox"));
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 0);
+        assert_eq!(planner_path(&base).unwrap(), d); // 두 번 불러도 같다
     }
 
     #[test]

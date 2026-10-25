@@ -137,7 +137,12 @@ function countRest(o: string, dflt: number): { n: number; rest: string } {
 }
 const agentOf = (k: { agentId?: string; role?: string }) => k.agentId ?? (k.role ? ROLE_AGENT[k.role as keyof typeof ROLE_AGENT] ?? undefined : undefined);
 
-function startKo(s: string, ctx: ParseCtx): Intent | null {
+/** 받아쓰기 흔한 오인식(clod→claude, codecs→codex) — '숫자+개' 바로 앞일 때만 */
+const MISHEARD = new RegExp(String.raw`(?<![A-Za-z])(clod|codecs)(?=\s*(?:\d+|${NUMW})\s*${UNIT})`, "gi");
+const fixHeard = (s: string) => s.replace(MISHEARD, (w) => (w.toLowerCase() === "clod" ? "claude" : "codex"));
+
+function startKo(s0: string, ctx: ParseCtx): Intent | null {
+  const s = fixHeard(s0);
   let m: RegExpMatchArray | null;
   if ((m = s.match(new RegExp(`^(.*?)\\s*그룹\\s*(?:(?:을|를)\\s*)?(?:(?:하나|한\\s*개)\\s*)?(?:을|를)?\\s*(?:${CREATE})$`)))) {
     const { n, rest } = countRest(m[1]!, 3);
@@ -184,6 +189,7 @@ function controlKo(s: string, ctx: ParseCtx): Intent | null {
 // ---- 열기 (S-2496) ----
 const PANEL: Record<string, Extract<Intent, { t: "open" }>["what"]> = {
   설정: "settings", 환경설정: "settings", 프리셋: "presets", 메모리: "memory", 루프: "loops", 미션맵: "mission", 사용량: "usage",
+  대화목록: "conversations", 모든대화: "conversations",
   문서: "documents", 코드: "code", 마크다운: "markdown", 스킬: "skills",
 };
 function openKo(s: string): Intent | null {
@@ -334,6 +340,9 @@ function gitMsgKo(s: string): Intent | null {
 // S-2500: 한국어 일반 작업 문장 (영어의 동사 목록 휴리스틱과 같은 뜻)
 const WORK = /(?:고쳐|수정|구현|테스트|돌려|실행|리뷰|검토|확인|작성|써|정리|분석|디버그|리팩터|배포|빌드|설명|요약|조사|찾아)/;
 
+// 11묶음 최종 확인 8번: 콘솔을 만드는 말 — 파서가 못 읽었으면 콘솔로 보내지 말고 planner 에게
+const MAKE_KO = /(?:띄워|띄우|만들어|만들고|열어|열고|생성|추가해)/;
+
 function run(raw: string, ctx: ParseCtx): Intent | null {
   const s0 = raw.replace(/\s+/g, " ").trim().replace(/[\s.!?,;:~。]+$/, "");
   if (!/[가-힣]/.test(s0)) return null;
@@ -341,11 +350,12 @@ function run(raw: string, ctx: ParseCtx): Intent | null {
   const sf = s1.replace(/(^|\s)(?:제발|좀|한번)(?=\s|$)/g, "$1").replace(/\s+/g, " ").trim();
   if (/(^|\s)@/.test(s1)) return handoffKo(s1, ctx); // 멘션은 기존 멘션 경로로 (넘기기만 한국어로)
 
+  if (PANEL[sf.replace(/\s+/g, "")] === "conversations") return { t: "open", what: "conversations" }; // H2 S-2821 맨말 "대화 목록"·"모든 대화"
   for (const [re, intent] of EXACT) if (re.test(sf)) return intent;
   return (
     workspaceKo(sf, ctx) ?? loopKo(sf) ?? forwardKo(sf, ctx) ?? handoffKo(sf, ctx) ?? orchKo(sf, ctx) ?? gitMsgKo(sf) ?? addKo(sf) ??
     openKo(sf) ?? startKo(sf, ctx) ?? controlKo(sf, ctx) ?? tellKo(s1, ctx) ??
-    (WORK.test(s1) ? { t: "orderUnrouted", text: s1 } : null)
+    (ctx.planner && MAKE_KO.test(s1) ? { t: "needsPlanner" } : WORK.test(s1) ? { t: "orderUnrouted", text: s1 } : null)
   );
 }
 

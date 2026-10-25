@@ -106,12 +106,12 @@ pub fn dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn memory_load(app: tauri::AppHandle, repo: String) -> Result<Loaded, String> {
+pub async fn memory_load(app: tauri::AppHandle, repo: String) -> Result<Loaded, String> {
     Ok(memory_load_in(&dir(&app)?, &repo))
 }
 
 #[tauri::command]
-pub fn memory_save(app: tauri::AppHandle, repo: String, scope: String, facts: Vec<Fact>) -> Result<(), String> {
+pub async fn memory_save(app: tauri::AppHandle, repo: String, scope: String, facts: Vec<Fact>) -> Result<(), String> {
     memory_save_in(&dir(&app)?, &repo, &scope, facts)
 }
 

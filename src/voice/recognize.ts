@@ -37,7 +37,7 @@ export async function transcribe(pcm: Uint8Array, o: { language: string; names: 
   if (!passesGate(pcmStats(pcm))) return ""; // S-2208 엔진을 부르지 않음
   await slot();
   try {
-    const raw = await voiceTranscribe(pcmToWav(pcm), langArg(o.language), promptHint(o.names), o.model).catch((e: unknown) => {
+    const raw = await voiceTranscribe(pcmToWav(pcm), langArg(o.language), promptHint(o.names, undefined, o.language), o.model).catch((e: unknown) => {
       throw new VoiceError(typeof e === "string" ? e : "engine");
     });
     return snapNames(filterHallucination(raw).trim(), o.names);

@@ -54,12 +54,12 @@ fn file(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn loops_get(app: tauri::AppHandle, repo: String) -> Result<Vec<Value>, String> {
+pub async fn loops_get(app: tauri::AppHandle, repo: String) -> Result<Vec<Value>, String> {
     Ok(get(&file(&app)?, &repo))
 }
 
 #[tauri::command]
-pub fn loops_set(app: tauri::AppHandle, repo: String, list: Vec<Value>) -> Result<(), String> {
+pub async fn loops_set(app: tauri::AppHandle, repo: String, list: Vec<Value>) -> Result<(), String> {
     set(&file(&app)?, &repo, &list)
 }
 

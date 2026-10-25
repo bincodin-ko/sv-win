@@ -15,6 +15,8 @@ export function resumeSession(s: Pausable): boolean {
   s.resume();
   return true;
 }
+/** 1-6: 멈춰 있으면 재개, 아니면 멈춤(콘솔 하나의 pill 클릭) */
+export const toggleSession = (s: Pausable): boolean => (s.isPaused() ? resumeSession(s) : pauseSession(s));
 /** 멈춘 개수를 돌려준다. 이미 PAUSED 인 것은 건너뛴다 */
 export const pauseAll = (sessions: Pausable[]): number => sessions.filter(pauseSession).length;
 export const resumeAll = (sessions: Pausable[]): number => sessions.filter(resumeSession).length;

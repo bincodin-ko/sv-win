@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
-import { requestClose } from "../../console/session";
+import { getSession, requestClose } from "../../console/session";
+import { toggleMax, useMax } from "../../console/maximize";
+import { sessionKey } from "../../console/sessionKey";
+import { toggleSession } from "../../console/pause";
 import { termCopy, termPaste, termSelectAll, termSelection } from "../../terminal/termClipboard";
 import { TIDY_KEY_LABEL, tidyBoard } from "../tidy";
 import { setConsoleTextSize, type TextSizeChoice } from "../../terminal/textSize";
@@ -20,6 +23,7 @@ export default function NodeMenu({ at, ids, term, onClose }: { at: { x: number; 
   const root = useRef<HTMLDivElement>(null);
   useMenuKeys(root); // useEscClose 보다 먼저: Esc 로 닫히는 순간(React 가 바로 비움)보다 앞서 Esc 를 봐야 포커스 복원을 안다
   useEscClose(onClose);
+  const maxKey = useMax((s) => s.key);
   const st = useBoard.getState();
   const consoleIds = ids.filter((id) => isConsole(st.nodes[id]));
   const dids = new Set(ids.map((id) => st.nodes[id]?.diagramId));
@@ -31,6 +35,8 @@ export default function NodeMenu({ at, ids, term, onClose }: { at: { x: number; 
       {term && termSelection(term) !== "" && <Item label={tm("Copy")} onClick={done(() => void termCopy(term))} />}
       {term && <Item label={tm("Paste")} onClick={done(() => void termPaste(term))} />}
       {term && <Item label={tm("Select all")} onClick={done(() => termSelectAll(term))} />}
+      {ids.length === 1 && consoleIds.length === 1 && <Item label={maxKey === sessionKey(wsId, ids[0]!) ? tm("Restore") : tm("Maximize")} extra="Ctrl+Shift+Enter" onClick={done(() => toggleMax(sessionKey(wsId, ids[0]!)))} />}
+      {ids.length === 1 && consoleIds.length === 1 && <Item label={getSession(wsId, ids[0]!)?.isPaused() ? tm("Resume") : tm("Pause")} onClick={done(() => { const s = getSession(wsId, ids[0]!); if (s) toggleSession(s); })} />}
       <Item label={tm("Duplicate")} onClick={done(() => useBoard.getState().duplicate(ids))} />
       <Item label={tm("Bring to front")} onClick={done(() => useBoard.getState().bringToFront(ids))} />
       {consoleIds.length >= 2 && <Item label={tm("Group")} extra="Ctrl+G" onClick={done(() => void useBoard.getState().createGroup(ids))} />}

@@ -32,6 +32,9 @@ pub struct Repos {
     /// B2 S-307: repo 경로 → 마지막으로 본 워크스페이스 id. 필드가 없는 옛 파일도 읽어야 한다
     #[serde(default)] // S-307: 옛 파일에는 없어도 읽는다
     pub last_workspace: std::collections::HashMap<String, String>,
+    /// H5 S-2872: 폴더 없는 Hub 보드 목록. 필드가 없는 옛 파일도 읽는다
+    #[serde(default)]
+    pub hubs: Vec<Workspace>,
 }
 
 pub fn main_path(dir: &Path, id: &str) -> PathBuf {
@@ -159,35 +162,35 @@ fn check_id(id: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn board_load(app: tauri::AppHandle, id: String) -> Result<LoadResult, String> {
+pub async fn board_load(app: tauri::AppHandle, id: String) -> Result<LoadResult, String> {
     check_id(&id)?;
     Ok(load(&boards_dir(&app)?, &id, &now_stamp()))
 }
 
 #[tauri::command]
-pub fn board_save(app: tauri::AppHandle, id: String, json: String) -> Result<(), String> {
+pub async fn board_save(app: tauri::AppHandle, id: String, json: String) -> Result<(), String> {
     check_id(&id)?;
     save(&boards_dir(&app)?, &id, &json, &now_stamp())
 }
 
 #[tauri::command]
-pub fn board_archive(app: tauri::AppHandle, id: String) -> Result<(), String> {
+pub async fn board_archive(app: tauri::AppHandle, id: String) -> Result<(), String> {
     check_id(&id)?;
     archive(&boards_dir(&app)?, &id, &now_stamp())
 }
 
 #[tauri::command]
-pub fn repos_get(app: tauri::AppHandle) -> Result<Repos, String> {
+pub async fn repos_get(app: tauri::AppHandle) -> Result<Repos, String> {
     Ok(repos_load(&boards_dir(&app)?.join("repos.json")))
 }
 
 #[tauri::command]
-pub fn repos_set(app: tauri::AppHandle, repos: Repos) -> Result<(), String> {
+pub async fn repos_set(app: tauri::AppHandle, repos: Repos) -> Result<(), String> {
     repos_store(&boards_dir(&app)?.join("repos.json"), &repos)
 }
 
 #[tauri::command]
-pub fn dir_exists(path: String) -> bool {
+pub async fn dir_exists(path: String) -> bool {
     Path::new(&path).is_dir()
 }
 
@@ -324,6 +327,21 @@ mod tests {
         assert_eq!(repos_load(&f), r);
         let text = fs::read_to_string(&f).unwrap();
         assert!(text.contains("\"lastRepo\""), "파일 키는 lastRepo: {text}");
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    // H5 S-2872: hubs 필드가 없는 옛 repos.json 도 읽히고, 저장 왕복에 hubs 가 남는다
+    #[test]
+    fn repos_hubs_old_file_and_roundtrip() {
+        let d = tmp("hubs");
+        let f = d.join("repos.json");
+        fs::write(&f, r#"{"repos":[{"path":"C:/a","name":"a","workspaces":[]}],"lastRepo":"C:/a"}"#).unwrap();
+        let old = repos_load(&f);
+        assert_eq!((old.repos.len(), old.hubs.len()), (1, 0), "hubs 없는 옛 파일도 repos 를 잃지 않고 읽힌다");
+        let r = Repos { hubs: vec![Workspace { id: "ws-h1".into(), name: "Hub 1".into() }], last_repo: Some("hub:ws-h1".into()), ..Default::default() };
+        repos_store(&f, &r).unwrap();
+        assert!(fs::read_to_string(&f).unwrap().contains("\"hubs\""));
+        assert_eq!(repos_load(&f), r);
         let _ = fs::remove_dir_all(&d);
     }
 

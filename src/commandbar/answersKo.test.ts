@@ -51,6 +51,12 @@ describe("S-2520 고정 문구", () => {
     expect(helpText()).toContain("그룹 만들어");
     expect(helpText()).not.toMatch(/spawn|pause/i);
   });
+  it("S-2985 도움말 마지막 줄(플래너)이 한국어", () => {
+    const h = helpText().split("\n");
+    expect(h).toHaveLength(18);
+    expect(h.at(-1)).toContain("플래너");
+    expect(h.at(-1)).not.toMatch(/planner/i);
+  });
   it("영어 화면에서는 영어 그대로", () => {
     setLang("en");
     expect(statusText([r("Otto", "WORKING")])).toBe("1 console: 1 working");

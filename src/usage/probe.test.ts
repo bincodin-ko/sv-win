@@ -49,7 +49,7 @@ describe("S-1518 시각 규칙", () => {
 
 describe("S-1517 명령 표", () => {
   it("Claude /usage, Codex /status 다음 /usage, Gemini /stats, Kimi·Copilot /usage, Amp·OpenCode 는 명령 실행", () => {
-    expect(SESSION_CMDS).toMatchObject({ claude: ["/usage"], codex: ["/status", "/usage"], gemini: ["/stats"], kimi: ["/usage"], copilot: ["/usage"] });
+    expect(SESSION_CMDS).toMatchObject({ claude: ["/usage"], codex: ["/status", "/usage"], gemini: ["/stats model"], kimi: ["/usage"], copilot: ["/usage"] });
     expect(EXEC_ARGS).toMatchObject({ amp: ["usage"], opencode: ["stats"] });
   });
 });
@@ -81,13 +81,13 @@ describe("S-1517 확인 흐름", () => {
     expect(fakePty.writes(id).filter((w) => w !== "\r")).toEqual(["/status", "/usage"]);
     expect(r.parsed?.windows[0]).toEqual({ label: "Monthly limit", pct: 27, resetText: "08:37 on 14 Sep" });
   });
-  it("Gemini: /stats, 화면은 해석하지 않고 raw 만", async () => {
+  it("Gemini: /stats model, 화면은 해석하지 않고 raw 만", async () => {
     const { p, clock, id } = await start("gemini");
     await ready(clock, id);
     fakePty.emit(id, "Session stats: 12 requests\r\n");
     await pump(clock, 5000);
     const r = await p;
-    expect(fakePty.writes(id)[0]).toBe("/stats");
+    expect(fakePty.writes(id)[0]).toBe("/stats model");
     expect(r).toMatchObject({ state: "ok", parsed: null });
     expect(r.raw).toContain("12 requests");
   });

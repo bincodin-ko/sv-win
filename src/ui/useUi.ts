@@ -8,6 +8,10 @@ interface UiStore {
   /** C1 S-805: Git 패널 열림(G 키가 켜고 끈다) */
   gitOpen: boolean;
   openGit: () => void;
+  /** H2 S-2820: 'All conversations' 겹 화면 */
+  conversationsOpen: boolean;
+  openConversations: () => void;
+  closeConversations: () => void;
   closeGit: () => void;
   /** slots.length = 처음 슬롯 수(0 이면 6). at = 열린 자리(화면 좌표, 없으면 아래 가운데), world = Spawn 덩어리 왼쪽 위(월드 좌표) */
   composer: { open: boolean; slots: unknown[]; at?: { x: number; y: number }; world?: { x: number; y: number } };
@@ -42,6 +46,9 @@ export const useUi = create<UiStore>((set, get) => ({
   gitOpen: false,
   openGit: () => set({ gitOpen: true }),
   closeGit: () => set({ gitOpen: false }),
+  conversationsOpen: false,
+  openConversations: () => set({ conversationsOpen: true }),
+  closeConversations: () => set({ conversationsOpen: false }),
   connect: null,
   mission: { open: false },
   memory: { open: false },

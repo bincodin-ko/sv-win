@@ -158,6 +158,13 @@ describe("S-1983 한도·S-1984 막힘", () => {
     expect(repoState(A).run).toBeNull();
     expect(repoState(A).notice).toBe("Claude Code is asking a question Symvibe will not answer for you. Open a console in this repo, answer it there, and try again.");
   });
+  it("blocked 권한 질문 → 질문 줄과 설정 안내", async () => {
+    const p = startRun(A, req);
+    held[0]!.done({ blocked: true, why: "Bash command\n git push\nDo you want to proceed?\n 1. Yes" });
+    await p;
+    expect(repoState(A).notice).toContain("Claude Code asked for permission to use a tool:");
+    expect(repoState(A).notice).not.toContain("Open a console");
+  });
   it("blocked(Codex)는 Codex 이름", async () => {
     const p = startRun(A, { ...req, agentId: "codex" });
     held[0]!.done({ blocked: true, why: "x" });

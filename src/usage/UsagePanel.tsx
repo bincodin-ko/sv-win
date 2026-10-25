@@ -14,6 +14,8 @@ import ClaudeView from "./ClaudeView";
 import CodexView from "./CodexView";
 import { createChimes, playSound, type ChimeCfg } from "./chime";
 import { OPEN_MAX_AGE, USAGE_AGENTS } from "./probe";
+import { parseOpenCodeStats } from "./parse";
+import { Bar, Stat } from "./parts";
 import { boardKey, checkOnBoardOpen } from "./boardCheck";
 import RawView from "./RawView";
 import { realClock } from "../hidden/screen";
@@ -120,6 +122,21 @@ export default function UsagePanel() {
       );
     if (r.parsed && !raw && tab === "claude") return <ClaudeView parsed={r.parsed} at={r.at} />;
     if (r.parsed && !raw && tab === "codex") return <CodexView parsed={r.parsed} at={r.at} />;
+    if (r.parsed && !raw && tab === "gemini")
+      return <div style={{ display: "grid", gap: 14 }}>{r.parsed.windows.map((w) => <Bar key={w.label} w={w.label === "Daily limit" ? { ...w, label: t("Daily limit") } : w} showUsed />)}</div>;
+    const oc = !raw && tab === "opencode" ? parseOpenCodeStats(r.raw) : null;
+    if (oc)
+      return (
+        <div style={{ display: "grid", gap: 10 }}>
+          <div data-testid="usage-oc-summary" style={{ display: "grid", gap: 4 }}>
+            <Stat k={t("Sessions")} v={String(oc.sessions ?? "–")} />
+            <Stat k={t("Messages")} v={oc.messages?.toLocaleString("en-US") ?? "–"} />
+            <Stat k={t("Total Cost")} v={oc.cost === undefined ? "–" : `$${oc.cost.toFixed(2)}`} />
+            <Stat k={t("Avg Cost/Day")} v={oc.costPerDay === undefined ? "–" : `$${oc.costPerDay.toFixed(2)}`} />
+          </div>
+          <div data-testid="usage-oc-note" style={{ color: "var(--text-dim)", fontSize: 11 }}>{t("OpenCode has no plan limits here — totals from `opencode stats`")}</div>
+        </div>
+      );
     return <RawView text={r.raw} />;
   };
 

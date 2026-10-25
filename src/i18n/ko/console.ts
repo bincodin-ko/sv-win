@@ -1,5 +1,9 @@
 // K4: 콘솔·터미널·명령줄·음성 화면 글 + 받아쓰기 언어 이름 26개(S-2451)
 export default {
+  // 1-3·1-4·1-6: 크게 보기·pill 일시정지
+  "Maximize": "크게 보기",
+  "Restore": "원래 크기로",
+  "Click to pause/resume": "누르면 일시정지/재개",
   // 에이전트 고르기·콘솔 닫기·붙여넣기·이어하기
   "Detected on your system": "이 PC에서 찾은 에이전트",
   "Your agents": "내 에이전트",
@@ -92,6 +96,17 @@ export default {
   "Automatic voice": "자동 음성",
   "Test": "테스트",
   "This is the voice I'll use.": "이 목소리로 읽어 드릴게요.",
+  // Q1 Piper (S-3100~S-3111)
+  "Speaking engine": "말하기 엔진",
+  "Windows built-in": "Windows 내장",
+  "Piper (natural, offline)": "Piper (자연스러운 음성, 오프라인)",
+  "Download Piper voice (~85 MB)": "Piper 음성 내려받기 (약 85 MB)",
+  "Downloading… {pct}%": "내려받는 중… {pct}%",
+  "Korean voice: KSS dataset, CC BY-NC-SA 4.0 (non-commercial)": "한국어 음성: KSS 데이터셋, CC BY-NC-SA 4.0 (비상업용)",
+  "English voice: LJ Speech, public domain": "영어 음성: LJ Speech, 퍼블릭 도메인",
+  "Last Piper try failed: {reason} — used the Windows voice": "마지막 Piper 시도가 실패했어요: {reason} — Windows 음성으로 읽었어요",
+  "Download Piper voice?": "Piper 음성을 내려받을까요?",
+  "Download Piper (~22 MB) and the {lang} voice (~63 MB) from GitHub and Hugging Face? Speech stays on this PC.": "GitHub와 Hugging Face에서 Piper(약 22 MB)와 {lang} 음성(약 63 MB)을 내려받을까요? 말소리는 이 PC에서만 만들어져요.",
   "No local voice found": "이 PC에 한국어 음성이 없어요. Windows 설정 › 시간 및 언어 › 음성에서 추가하세요.",
   "Ready": "준비됨",
   "Downloading {pct}%": "내려받는 중 {pct}%",

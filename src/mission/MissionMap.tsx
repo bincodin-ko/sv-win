@@ -1,10 +1,11 @@
 // S-1300~S-1315 Mission Map: 모달 · 요약 · 필터 칩 · 검색 · 3열 트리와 곡선 · 오른쪽 패널(집계·STRUCTURE·검사창)
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { tm, tp, useT } from "../i18n";
 import { agentsList } from "../agents/api";
 import { DEFAULT_SCOPE, registry } from "../board/boards";
 import { GROUP_PAD, groupBounds, membersOf } from "../board/groups";
 import { getSession } from "../console/session";
+import { consoleCwd } from "../console/offers";
 import { fitBounds } from "../board/viewport";
 import { runningLoops } from "../loops/store";
 import { useSettings } from "../settings/useSettings";
@@ -13,6 +14,7 @@ import { openSettings, useUi } from "../ui/useUi";
 import Inspector, { STATE_COLOR, STATE_LABEL, type Sel } from "./Inspector";
 import Lines from "./lines";
 import { missionModel, type Filter, type MModel, type MState } from "./model";
+import { capSubs, subStateText, subTargets, useSubagents, visibleSubs, type Sub } from "./subagents";
 
 const FILTERS: [Filter, string][] = [["all", tm("All")], ["working", tm("Working")], ["needs", tm("Needs you")], ["idle", tm("Idle")], ["done", tm("Done")]];
 const STATES: MState[] = ["working", "needs", "idle", "done"];
@@ -23,7 +25,7 @@ function world() {
   const wsId = sh.openRepos.find((r) => r.path === sh.activeRepo)?.activeWs ?? "";
   return { wsId, store: (wsId ? registry.get(wsId) : undefined) ?? DEFAULT_SCOPE.store };
 }
-function compute(filter: Filter, query: string, names: Record<string, string>): { m: MModel; wsId: string } {
+function compute(filter: Filter, query: string, names: Record<string, string>, subs: Record<string, Sub[]> = {}): { m: MModel; wsId: string } {
   const { wsId, store } = world();
   const { nodes, groups } = store.getState();
   const sess = (id: string) => {
@@ -33,7 +35,7 @@ function compute(filter: Filter, query: string, names: Record<string, string>): 
     // 끝난 세션(끄기 포함)은 Done. 시작 실패 ERROR 는 그대로
     return { status: !s.isRunning() && st !== "DONE" && st !== "ERROR" ? ("DONE" as const) : st, hooked: s.hooked(), lastOut: s.lastDataAt() };
   };
-  return { m: missionModel(nodes, groups ?? [], sess, runningLoops(), { filter, query, now: Date.now(), agentName: (id) => names[id] ?? id }), wsId };
+  return { m: missionModel(nodes, groups ?? [], sess, runningLoops(), { filter, query, now: Date.now(), agentName: (id) => names[id] ?? id, subsOf: (id) => subs[id] ?? [] }), wsId };
 }
 
 /** S-1306: 지도를 닫고 보드 카메라를 그 콘솔(그룹이면 그룹 전체, 카드면 카드)로 옮기고 선택 */
@@ -61,19 +63,23 @@ export default function MissionMap() {
   const [data, setData] = useState(() => compute("all", "", {}));
   const last = useRef(JSON.stringify(data));
   const host = useRef<HTMLDivElement>(null);
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  const wsNow = world();
+  const subs = useSubagents(true, subTargets(wsNow.store.getState().nodes, (n) => consoleCwd(wsNow.wsId, n))); // Q5: 지도가 열려 있는 동안(이 컴포넌트가 떠 있는 동안)만
   const liveOn = useSettings((s) => s.s.liveStatus === true);
   useEffect(() => void agentsList().then((l) => setNames(Object.fromEntries(l.map((a) => [a.id, a.name])))), []);
   // S-1312: 0.5초마다 다시 읽는다(GroupHalo 와 같은 방식). 달라진 때만 그림을 바꾼다
   useEffect(() => {
     const read = () => {
-      const next = compute(filter, query, names);
+      const next = compute(filter, query, names, subs);
       const j = JSON.stringify(next);
       if (j !== last.current) { last.current = j; setData(next); }
     };
     read();
     const t = setInterval(read, 500);
     return () => clearInterval(t);
-  }, [filter, query, names]);
+  }, [filter, query, names, subs]);
+  useEffect(() => { const i = setInterval(tick, 1000); return () => clearInterval(i); }, []); // Running 경과
   const { m, wsId } = data;
   const lines = useMemo(() => m.lines, [m]);
   const pick = (kind: NonNullable<Sel>["kind"], id: string) => setSel({ kind, id });
@@ -128,12 +134,23 @@ export default function MissionMap() {
                   <div style={head}>{t("Consoles")}</div>
                   {m.consoles.map((c) => {
                     const on = sel?.kind === "con" && sel.id === c.id;
+                    const { rows, more } = capSubs(visibleSubs(subs[c.id] ?? [], Date.now()));
                     return (
-                      <button key={c.id} data-testid="mm-console" data-id={c.id} data-mm={`con:${c.id}`} data-state={c.state} data-selected={on} style={box(on, { display: "flex", alignItems: "center", gap: 8 })}
+                      <div key={c.id}>
+                      <button data-testid="mm-console" data-id={c.id} data-mm={`con:${c.id}`} data-state={c.state} data-selected={on} style={box(on, { display: "flex", alignItems: "center", gap: 8 })}
                         onClick={() => pick("con", c.id)} onDoubleClick={() => go("con", c.id)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); go("con", c.id); } }}>
                         <span data-testid="mm-dot" data-glow={c.glow} style={{ width: 8, height: 8, borderRadius: 4, flex: "none", background: STATE_COLOR[c.state], boxShadow: c.glow ? `0 0 0 3px ${STATE_COLOR[c.state]}55` : "none", transition: "box-shadow .3s" }} />
                         <span style={{ minWidth: 0 }}><div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div><div style={{ color: "var(--mute)" }}>{c.sub}</div></span>
                       </button>
+                      {rows.map((x) => (
+                        <div key={x.id} data-testid="mm-sub" data-state={x.state} style={{ display: "flex", alignItems: "center", gap: 8, margin: "-4px 0 6px 16px", padding: "0 10px", fontSize: 12, color: "var(--mute)" }}>
+                          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>↳ {x.name} · {x.title}</span>
+                          <span style={{ width: 6, height: 6, borderRadius: 3, flex: "none", background: x.state === "running" ? STATE_COLOR.working : x.state === "failed" ? "var(--danger)" : x.state === "unknown" ? "var(--text-dim)" : STATE_COLOR.done }} />
+                          <span data-testid="mm-sub-state" style={{ flex: "none" }}>{subStateText(x, Date.now())}</span>
+                        </div>
+                      ))}
+                      {more > 0 && <div data-testid="mm-sub-more" style={{ margin: "-4px 0 6px 16px", padding: "0 10px", fontSize: 12, color: "var(--mute)" }}>{t("+{n} more", { n: more })}</div>}
+                      </div>
                     );
                   })}
                 </div>
@@ -142,7 +159,7 @@ export default function MissionMap() {
           )}
           <div data-testid="mm-side" style={{ width: 280, flex: "none", borderLeft: "1px solid var(--bd)", padding: 14, overflow: "auto" }}>
             <div style={{ borderBottom: "1px solid var(--bd)", marginBottom: 14, paddingBottom: 12 }}>
-              <Inspector sel={sel} model={m} wsId={wsId} onGo={goTo} />
+              <Inspector sel={sel} model={m} wsId={wsId} onGo={goTo} subs={subs} />
             </div>
             <div style={head}>{t("Status")}</div>
             {STATES.map((s) => (

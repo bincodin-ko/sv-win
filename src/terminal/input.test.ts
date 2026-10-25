@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { altPlain, joinOneLine, mapKey, pasteLineCount, sanitizePaste, type KeyCtx } from "./input";
+import { altPlain, isStrayPaste, joinOneLine, mapKey, pasteLineCount, sanitizePaste, type KeyCtx } from "./input";
 
 const k = (key: string, m: { c?: boolean; s?: boolean; a?: boolean } = {}) => ({ key, ctrlKey: !!m.c, shiftKey: !!m.s, altKey: !!m.a, metaKey: false });
 const ctx = (o: Partial<KeyCtx> = {}): KeyCtx => ({ hasSelection: false, altScreen: false, ...o });
@@ -68,5 +68,41 @@ describe("S-374 Alt as Meta", () => {
     expect(altPlain(alt("b", { ctrlKey: true }), false)).toBeNull();
     expect(altPlain(alt("b", { metaKey: true }), false)).toBeNull();
     expect(altPlain(alt("Enter"), false)).toBeNull();
+  });
+});
+
+describe("isStrayPaste (1-3 우클릭 붙여넣기 막기)", () => {
+  it("우클릭 직후 진짜 paste = 막는다", () => expect(isStrayPaste(true, 1000, 500)).toBe(true));
+  it("메뉴 Paste(합성)·시간이 지난 Ctrl+V·우클릭 없음 = 통과", () => {
+    expect(isStrayPaste(false, 1000, 500)).toBe(false);
+    expect(isStrayPaste(true, 5000, 500)).toBe(false);
+    expect(isStrayPaste(true, 1000, 0)).toBe(false);
+  });
+});
+
+import { imeKeyBlocked } from "./input";
+
+describe("한글 조합 중 공백·순서", () => {
+  // xterm 모형: 막히지 않은 keydown 의 Space 는 " " 를 바로 보내고, compositionend 는 확정 글자를 보낸다
+  type Ev = { t: "keydown"; key: string; isComposing?: boolean; keyCode?: number } | { t: "compositionend"; data: string };
+  const run = (evs: Ev[]) => evs.flatMap((e) => (e.t === "compositionend" ? [e.data] : imeKeyBlocked(e) ? [] : e.key === " " ? [" "] : []));
+  it("조합 중 keydown(isComposing 또는 229)은 막는다, 평소 키는 통과", () => {
+    expect(imeKeyBlocked({ isComposing: true, keyCode: 32 })).toBe(true);
+    expect(imeKeyBlocked({ isComposing: false, keyCode: 229 })).toBe(true);
+    expect(imeKeyBlocked({ isComposing: false, keyCode: 32 })).toBe(false);
+  });
+  it("않 → 뜰 → Space → 때: PTY 에는 '않','뜰',' ','때' 가 한 번씩 순서대로", () => {
+    const out = run([
+      { t: "keydown", key: "Process", isComposing: true, keyCode: 229 },
+      { t: "compositionend", data: "않" },
+      { t: "keydown", key: "Process", isComposing: true, keyCode: 229 },
+      { t: "keydown", key: " ", isComposing: true, keyCode: 229 }, // Space 로 조합 끝
+      { t: "compositionend", data: "뜰" },
+      { t: "keydown", key: " ", isComposing: false, keyCode: 32 },
+      { t: "keydown", key: "Process", isComposing: true, keyCode: 229 },
+      { t: "compositionend", data: "때" },
+    ]);
+    expect(out.join("")).toBe("않뜰 때");
+    expect(out.filter((x) => x === " ")).toHaveLength(1);
   });
 });

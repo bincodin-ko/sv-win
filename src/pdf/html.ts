@@ -24,7 +24,7 @@ export function buildPdfHtml(o: PdfOpts): string {
     `</section>`;
   const contents =
     toc.length >= 3
-      ? `<section class="toc"><div class="t">Contents</div><ol>${toc.map((t) => `<li class="l${t.level}"><a href="#${t.id}">${esc(t.text)}</a></li>`).join("")}</ol></section>`
+      ? `<section class="toc"><div class="t">Contents</div><ol>${toc.map((t) => `<li class="l${t.level}"><a href="#${t.id}">${esc(t.text)}</a><span class="pg" data-pg="${t.id}">000</span></li>`).join("")}</ol></section>`
       : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(o.title)}</title><style>\n${pdfCss(o.paper, o.title)}\n</style></head><body>${cover}${contents}<main>${body}</main></body></html>`;
 }

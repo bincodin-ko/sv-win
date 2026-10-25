@@ -454,7 +454,7 @@ pub mod cmds {
     }
 
     #[tauri::command]
-    pub fn agents_list(app: tauri::AppHandle, cache: tauri::State<'_, AgentCache>) -> Result<Vec<AgentInfo>, String> {
+    pub async fn agents_list(app: tauri::AppHandle, cache: tauri::State<'_, AgentCache>) -> Result<Vec<AgentInfo>, String> {
         let s = load(&app)?;
         let had_cache = cache.snapshot().is_some();
         let snap = cache.get_or_scan(&s);
@@ -474,14 +474,14 @@ pub mod cmds {
 
     /// Default shell 칸 안내(S-373): 지금 Shell 콘솔이 쓰는 셸
     #[tauri::command]
-    pub fn current_shell(app: tauri::AppHandle) -> Result<String, String> {
+    pub async fn current_shell(app: tauri::AppHandle) -> Result<String, String> {
         let s = load(&app)?;
         let dirs = search_dirs();
         Ok(find_shell(s.get("defaultShell").and_then(|v| v.as_str()), &|n| which(n, &dirs), std::env::var("COMSPEC").ok().as_deref()).0)
     }
 
     #[tauri::command]
-    pub fn agent_spawn_spec(app: tauri::AppHandle, agent_id: String, resume: Option<Resume>, no_yolo: Option<bool>) -> Result<Spec, String> {
+    pub async fn agent_spawn_spec(app: tauri::AppHandle, agent_id: String, resume: Option<Resume>, no_yolo: Option<bool>) -> Result<Spec, String> {
         let s = load(&app)?;
         let (dirs, ext) = (search_dirs(), pathext());
         let yolo = effective_yolo(s.get("yolo").and_then(|v| v.as_bool()).unwrap_or(false), no_yolo); // 숨은 세션은 no_yolo
@@ -499,7 +499,7 @@ pub mod cmds {
     }
 
     #[tauri::command]
-    pub fn default_agent(app: tauri::AppHandle, cache: tauri::State<'_, AgentCache>) -> Result<String, String> {
+    pub async fn default_agent(app: tauri::AppHandle, cache: tauri::State<'_, AgentCache>) -> Result<String, String> {
         let s = load(&app)?;
         let snap = cache.get_or_scan(&s);
         let setting = s.get("defaultAgent").and_then(|v| v.as_str());

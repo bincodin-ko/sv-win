@@ -1,6 +1,7 @@
 // F1 음성 엔진(S-2200~S-2215): whisper.cpp 실행 파일 + ggml 모델을 앱 데이터 폴더 Voice/ 에 두고 자식 프로세스로 받아쓴다.
 // 내려받기는 사용자가 켤 때만(프런트 확인창 S-2202). 소리는 메모리와 Voice/tmp 의 임시 WAV 에만 있고 끝나면 지운다(S-2214).
 pub mod pins;
+pub mod piper;
 #[cfg(test)]
 mod tests;
 use crate::repo_setup::{kill_pid, quiet};
@@ -35,6 +36,15 @@ pub struct Voice {
     busy: Arc<Mutex<()>>,
 }
 
+fn is_engine(kind: &str) -> bool {
+    kind == "engine" || kind == "piper-engine"
+}
+
+/// 핀 종류별 (엔진 폴더, 모델 폴더): whisper = Voice/{engine,models}, piper = Voice/piper/{engine,voices} (Q1 S-3103)
+fn folders(dir: &Path, kind: &str) -> (PathBuf, PathBuf) {
+    if kind.starts_with("piper-") { (dir.join("piper/engine"), dir.join("piper/voices")) } else { (dir.join("engine"), dir.join("models")) }
+}
+
 /// Windows 기본 도구(curl·tar·certutil)는 System32 의 것을 쓴다(Git Bash 의 같은 이름 도구를 피함)
 fn sys(exe: &str) -> PathBuf {
     let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
@@ -55,11 +65,12 @@ impl Voice {
             return d.part.clone();
         }
         let ok = |marker: PathBuf| std::fs::read_to_string(marker).map(|s| s.trim() == p.sha256).unwrap_or(false);
-        let ready = if p.kind == "engine" {
-            find_exe(&dir.join("engine")).is_some() && ok(dir.join("engine/.ok"))
+        let (eng, models) = folders(dir, &p.kind);
+        let ready = if is_engine(&p.kind) {
+            find_exe(&eng).is_some() && ok(eng.join(".ok"))
         } else {
-            let f = dir.join("models").join(&p.file);
-            std::fs::metadata(&f).map(|m| m.len() == p.bytes).unwrap_or(false) && ok(dir.join("models").join(format!("{}.ok", p.file)))
+            let f = models.join(&p.file);
+            std::fs::metadata(&f).map(|m| m.len() == p.bytes).unwrap_or(false) && ok(models.join(format!("{}.ok", p.file)))
         };
         if ready { Part::Ready } else { Part::None }
     }
@@ -123,8 +134,8 @@ impl Voice {
         if sha256_file(&part_file).as_deref() != Some(p.sha256.as_str()) {
             return fail("checksum");
         }
-        if p.kind == "engine" {
-            let eng = dir.join("engine");
+        let (eng, models) = folders(dir, &p.kind);
+        if is_engine(&p.kind) {
             let _ = std::fs::remove_dir_all(&eng);
             let _ = std::fs::create_dir_all(&eng);
             let mut tar = Command::new(sys("tar.exe"));
@@ -139,7 +150,6 @@ impl Voice {
                 return fail("write");
             }
         } else {
-            let models = dir.join("models");
             let _ = std::fs::create_dir_all(&models);
             let dest = models.join(&p.file);
             let _ = std::fs::remove_file(&dest);
@@ -167,9 +177,22 @@ impl Voice {
     }
 }
 
-/// S-2203: https 의 ggml-org/whisper.cpp(GitHub)·ggerganov/whisper.cpp(Hugging Face) 아래만
+/// S-3104: 해시가 ""인 핀은 받지 않고, 주소는 허용 목록만
+pub fn download_check(p: &Pin) -> Result<(), String> {
+    if p.sha256.is_empty() {
+        return Err("not available".into());
+    }
+    if !url_allowed(&p.url) {
+        return Err("url not allowed".into());
+    }
+    Ok(())
+}
+
+/// S-2203·S-3104: https 의 ggml-org/whisper.cpp·rhasspy/piper 릴리스(GitHub)·ggerganov/whisper.cpp·rhasspy/piper-voices(Hugging Face) 아래만
 pub fn url_allowed(u: &str) -> bool {
-    u.starts_with("https://github.com/ggml-org/whisper.cpp/") || u.starts_with("https://huggingface.co/ggerganov/whisper.cpp/")
+    ["https://github.com/ggml-org/whisper.cpp/", "https://huggingface.co/ggerganov/whisper.cpp/", "https://github.com/rhasspy/piper/releases/download/", "https://huggingface.co/rhasspy/piper-voices/resolve/"]
+        .iter()
+        .any(|pre| u.starts_with(pre))
 }
 
 /// S-2207 인자: -m 모델 -f wav -l 언어|auto -nt -np -nth 0.6 -t 스레드 --prompt 힌트(비면 뺌)
@@ -247,7 +270,7 @@ pub fn find_exe(d: &Path) -> Option<PathBuf> {
     }
     let mut files = vec![];
     walk(d, 0, &mut files);
-    ["whisper-cli.exe", "main.exe"]
+    ["whisper-cli.exe", "main.exe", "piper.exe"]
         .iter()
         .find_map(|n| files.iter().find(|f| f.file_name().is_some_and(|x| x.eq_ignore_ascii_case(n))).cloned())
 }
@@ -271,7 +294,7 @@ pub fn voice_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("Voice"))
 }
 #[tauri::command]
-pub fn voice_folder(app: tauri::AppHandle) -> Result<String, String> {
+pub async fn voice_folder(app: tauri::AppHandle) -> Result<String, String> {
     let d = voice_dir(&app)?;
     std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     Ok(d.to_string_lossy().into_owned())
@@ -297,7 +320,7 @@ pub struct Status {
 }
 
 #[tauri::command]
-pub fn voice_status(app: tauri::AppHandle, state: tauri::State<'_, Voice>, model: String) -> Result<Status, String> {
+pub async fn voice_status(app: tauri::AppHandle, state: tauri::State<'_, Voice>, model: String) -> Result<Status, String> {
     let m = model_kind(&model)?;
     let dir = voice_dir(&app)?;
     let s = load_settings(&app);
@@ -315,11 +338,9 @@ pub fn voice_status(app: tauri::AppHandle, state: tauri::State<'_, Voice>, model
 
 /// 고정 핀(pins.rs)만 받는다. 프런트는 종류 이름만 보낸다(URL·해시를 바꿀 수 없음)
 #[tauri::command]
-pub fn voice_download(app: tauri::AppHandle, state: tauri::State<'_, Voice>, kind: String) -> Result<(), String> {
+pub async fn voice_download(app: tauri::AppHandle, state: tauri::State<'_, Voice>, kind: String) -> Result<(), String> {
     let p = pin(&kind).ok_or("unknown download")?;
-    if !url_allowed(&p.url) {
-        return Err("url not allowed".into());
-    }
+    download_check(&p)?;
     let dir = voice_dir(&app)?;
     if matches!(state.part(&dir, &p), Part::Downloading { .. }) {
         return Ok(());

@@ -47,12 +47,12 @@ fn threads_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn thread_load(app: tauri::AppHandle, repo_key: String) -> Result<String, String> {
+pub async fn thread_load(app: tauri::AppHandle, repo_key: String) -> Result<String, String> {
     Ok(load(&threads_dir(&app)?, &repo_key, &crate::boards::now_stamp()))
 }
 
 #[tauri::command]
-pub fn thread_save(app: tauri::AppHandle, repo_key: String, json: String) -> Result<(), String> {
+pub async fn thread_save(app: tauri::AppHandle, repo_key: String, json: String) -> Result<(), String> {
     save(&threads_dir(&app)?, &repo_key, &json)
 }
 

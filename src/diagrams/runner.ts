@@ -1,3 +1,4 @@
+import { classifyBlock } from "../hidden/detect";
 import { t, tm } from "../i18n";
 // E3 S-2023·S-2025·S-2028·S-2030: 만들기 실행(상태 + 순수 판정). 카드·패널이 이것을 본다
 import { create } from "zustand";
@@ -10,7 +11,7 @@ import { buildDiagramPrompt, type DiagramStyle } from "./prompt";
 import { buildSpec } from "./spec";
 
 export const NOTHING_USABLE = tm("The agent returned nothing usable.");
-export const AGENT_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex" };
+export const AGENT_NAMES: Record<string, string> = { claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI", opencode: "OpenCode" };
 export const agentName = (id: string): string => AGENT_NAMES[id] ?? id;
 
 export function canStart(o: { repo: string | null; running: boolean; subject: string }): boolean {
@@ -21,6 +22,8 @@ export const newDiagramId = (): string => `dia-${Date.now().toString(36)}-${Math
 
 /** 끝난 결과 → 카드 안내 문구. 글이 있으면 null(= 읽어 보고 착지), 안내 없이 닫으면 "" */
 export function failMessage(r: StudioResult, name: string): string | null {
+  const b = "blocked" in r ? classifyBlock(r.why) : null;
+  if (b?.kind === "permission") return t("{name} asked for permission to use a tool: {question} Allow it in this repo's Claude permission settings, then try again.", { name, question: b.line });
   if ("blocked" in r) return t("{name} is asking a question Symvibe will not answer for you. Open a console in this repo, answer it there, and try again.", { name });
   if ("error" in r) return r.error;
   if (r.text) return null;

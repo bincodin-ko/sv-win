@@ -60,12 +60,21 @@ describe("S-1380 pickAgent", () => {
 });
 
 describe("S-1380·S-1388 scanRepo 는 시작 화면을 연다", () => {
-  it("설치된 Claude·Codex 만, 기본 Balanced, 기본 에이전트 선택", async () => {
+  it("Q3 S-3149: 설치된 읽을 수 있는 것(Claude·Codex·Gemini), 기본 Balanced, 기본 에이전트 선택", async () => {
     localStorage.setItem("symvibe.fakeInstalled", JSON.stringify(["codex", "gemini"]));
     await scanRepo(REPO);
     const s = useScan.getState();
     expect([s.stage, s.repo, s.quality, s.agent]).toEqual(["start", REPO, "balanced", "claude"]);
-    expect(s.agents.map((a) => a.id)).toEqual(["claude", "codex"]);
+    expect(s.agents.map((a) => a.id)).toEqual(["claude", "codex", "gemini"]);
+  });
+  it("Q3 S-3149: 설치됐지만 못 읽는 CLI 는 뒤에 회색+이유, 기본으로 고르지 않는다", async () => {
+    localStorage.setItem("symvibe.fakeInstalled", JSON.stringify(["grok"]));
+    await scanRepo(REPO);
+    const s = useScan.getState();
+    expect(s.agents.map((a) => a.id)).toEqual(["claude", "grok"]);
+    expect(s.agents[1]).toMatchObject({ why: "Symvibe can't read Grok's chat history yet" });
+    expect(s.agents[0]!.why).toBeUndefined();
+    expect(s.agent).toBe("claude");
   });
   it("진행 중이면 다시 눌러도 시작 화면으로 돌아가지 않는다", async () => {
     useScan.setState({ stage: "running", repo: REPO, phase: 1 });
@@ -135,6 +144,21 @@ describe("S-1381·S-1382·S-1384 스캔 진행", () => {
     expect(s.stage).toBe("error");
     expect(s.error).toMatchObject({ kind: "blocked", agent: "claude", text: "Claude needs an answer. Open a console of it, answer, and scan again." });
     expect(kills(id)).toBe(1);
+  });
+  it("권한 질문 막힘은 질문 줄을 보여 주고 콘솔 열기 없이 permission", async () => {
+    await scanRepo(REPO);
+    const before = fakePty.spawns().length;
+    const clock = fakeClock();
+    const p = startScan({ clock });
+    const id = await opened(before);
+    fakePty.emit(id, "Bash command\r\n  git push origin main\r\nDo you want to proceed?\r\n 1. Yes\r\n 2. No, and tell Claude what to do differently\r\n");
+    await drive(clock, 3000);
+    await p;
+    const e = useScan.getState().error;
+    expect(e?.kind).toBe("permission");
+    expect(e?.text).toContain("Claude asked for permission to use a tool:");
+    expect(e?.text).toContain("git push origin main");
+    expect(e?.agent).toBeUndefined();
   });
   it("S-1382 시간 초과는 'The scan took too long.' (제한은 10분)", async () => {
     expect(SCAN_TIMEOUT_MS).toBe(600_000);

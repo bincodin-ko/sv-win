@@ -92,6 +92,7 @@ test("S-642·S-644 Deploy: 콘솔 수·그룹이 맞고 Ctrl+Z 한 번에 전부
   expect(badges).toEqual(["claude", "claude", "shell", "shell"]);
   await page.mouse.click(40, 700); // 빈 캔버스 (보드 키보드 포커스)
   await page.keyboard.press("Control+z");
+  await page.getByTestId("confirm-close").getByRole("button", { name: "Close" }).click(); // 실행 중 콘솔을 지우는 되돌리기라 확인창
   await expect(consoles(page)).toHaveCount(0);
   await expect(page.getByTestId("group-halo")).toHaveCount(0);
 });
@@ -110,6 +111,7 @@ test("S-1160·S-1162·S-1164 Dev HQ: 칸반 1·웹 1(localhost:3000 대기)·콘
   await expect(page.getByTestId("web-waiting")).toBeVisible();
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // 큰 덩어리라 빈 캔버스 클릭이 타일에 닿을 수 있다
   await page.keyboard.press("Control+z");
+  await page.getByTestId("confirm-close").getByRole("button", { name: "Close" }).click(); // 실행 중 콘솔을 지우는 되돌리기라 확인창
   await expect(consoles(page)).toHaveCount(0);
   await expect(page.getByTestId("kb-col")).toHaveCount(0);
   await expect(page.getByTestId("web-tile")).toHaveCount(0);

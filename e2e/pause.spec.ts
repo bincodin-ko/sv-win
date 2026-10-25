@@ -19,7 +19,7 @@ test("S-546/S-620/S-621/S-624 pauseAll → pill PAUSED×2(호버 Paused)·ptyPau
   await page.evaluate(() => (window as any).__pause.pauseAll());
   await expect(pills(page).nth(0)).toHaveText("PAUSED");
   await expect(pills(page).nth(1)).toHaveText("PAUSED");
-  await expect(pills(page).nth(0)).toHaveAttribute("title", "Paused");
+  await expect(pills(page).nth(0)).toHaveAttribute("title", /Click to pause\/resume/);
   expect((await ctl(page)).filter((c) => c.op === "pause").map((c) => c.id).sort()).toEqual([1, 2]);
   // 멈춘 동안 출력이 와도 PAUSED 유지
   await emit(page, 1, "more");

@@ -1,16 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { codexFindSession, lastReply } from "../lib/ipc";
+import { agentFindSession, codexFindSession, lastReply } from "../lib/ipc";
 import { fakeClock } from "./fakeclock";
 import { readReply, waitReply } from "./reply";
 
 vi.mock("../lib/ipc", async (orig) => {
   const m = await orig<typeof import("../lib/ipc")>();
-  return { ...m, codexFindSession: vi.fn(async () => null), lastReply: vi.fn(m.lastReply) }; // lastReply: 인자를 기록하며 가짜 구현 그대로
+  return { ...m, codexFindSession: vi.fn(async () => null), agentFindSession: vi.fn(async () => null), lastReply: vi.fn(m.lastReply) }; // lastReply: 인자를 기록하며 가짜 구현 그대로
 });
 const w = window as unknown as { __fakeReply?: Record<string, string> | string | null };
 afterEach(() => {
   delete w.__fakeReply;
   vi.mocked(codexFindSession).mockReset();
+  vi.mocked(agentFindSession).mockReset();
 });
 
 describe("S-1206 readReply", () => {
@@ -38,6 +39,42 @@ describe("S-1206 readReply", () => {
   it("Codex 세션을 못 찾으면 null(화면 글자로 대신하지 않는다)", async () => {
     w.__fakeReply = "화면에 보이는 글자";
     expect(await readReply({ agentId: "codex", cwd: "C:\\r", startedAtMs: 1 })).toBeNull();
+  });
+});
+
+describe("Q3 S-3147 readReply: Gemini·OpenCode 갈래", () => {
+  it("gemini: agentFindSession(agent, cwd, 시작 시각, [])으로 찾아 lastReply 로 읽는다. Claude 는 부르지 않는다", async () => {
+    vi.mocked(agentFindSession).mockResolvedValue("g-1");
+    w.__fakeReply = { "g-1": "gemini says" };
+    expect(await readReply({ agentId: "gemini", cwd: "C:\\r", startedAtMs: 7001 })).toBe("gemini says");
+    expect(agentFindSession).toHaveBeenCalledWith("gemini", "C:\\r", 7001, []);
+    expect(lastReply).toHaveBeenLastCalledWith("gemini", "C:\\r", "g-1", undefined);
+    expect(codexFindSession).not.toHaveBeenCalled();
+    vi.mocked(agentFindSession).mockClear();
+    w.__fakeReply = { u1: "x" };
+    await readReply({ agentId: "claude", cwd: "C:\\r", sessionId: "u1", startedAtMs: 1 });
+    expect(agentFindSession).not.toHaveBeenCalled();
+  });
+  it("opencode 도 같은 길", async () => {
+    vi.mocked(agentFindSession).mockResolvedValue("ses_1");
+    w.__fakeReply = { ses_1: "opencode says" };
+    expect(await readReply({ agentId: "opencode", cwd: "C:\\r", startedAtMs: 7002 })).toBe("opencode says");
+    expect(agentFindSession).toHaveBeenCalledWith("opencode", "C:\\r", 7002, []);
+  });
+  it("찾은 id 는 기억한다(같은 세션 다음 읽기에 다시 안 찾음). 못 찾은 것은 기억하지 않는다", async () => {
+    vi.mocked(agentFindSession).mockResolvedValueOnce(null).mockResolvedValue("g-2");
+    w.__fakeReply = { "g-2": "late" };
+    const t = { agentId: "gemini", cwd: "C:\\r", startedAtMs: 7003 };
+    expect(await readReply(t)).toBeNull(); // 아직 파일 없음
+    expect(await readReply(t)).toBe("late");
+    expect(await readReply(t)).toBe("late");
+    expect(agentFindSession).toHaveBeenCalledTimes(2);
+    await readReply({ ...t, startedAtMs: 7004 }); // 다른 시작 시각 = 다른 세션
+    expect(agentFindSession).toHaveBeenCalledTimes(3);
+  });
+  it("찾기가 던져도 null", async () => {
+    vi.mocked(agentFindSession).mockRejectedValue(new Error("x"));
+    expect(await readReply({ agentId: "gemini", cwd: "C:\\r", startedAtMs: 7005 })).toBeNull();
   });
 });
 

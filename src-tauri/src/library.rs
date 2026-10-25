@@ -81,19 +81,19 @@ pub mod cmds {
         Ok(app.path().app_data_dir().map_err(|e| e.to_string())?.join("Documents"))
     }
     #[tauri::command]
-    pub fn doc_list(app: AppHandle, repo: String) -> Result<Vec<Meta>, String> {
+    pub async fn doc_list(app: AppHandle, repo: String) -> Result<Vec<Meta>, String> {
         super::list(&base(&app)?, &repo)
     }
     #[tauri::command]
-    pub fn doc_put(app: AppHandle, repo: String, meta: Meta, md: String) -> Result<(), String> {
+    pub async fn doc_put(app: AppHandle, repo: String, meta: Meta, md: String) -> Result<(), String> {
         super::put(&base(&app)?, &repo, &meta, &md)
     }
     #[tauri::command]
-    pub fn doc_get(app: AppHandle, repo: String, id: String) -> Result<String, String> {
+    pub async fn doc_get(app: AppHandle, repo: String, id: String) -> Result<String, String> {
         super::get(&base(&app)?, &repo, &id)
     }
     #[tauri::command]
-    pub fn doc_delete(app: AppHandle, repo: String, id: String) -> Result<(), String> {
+    pub async fn doc_delete(app: AppHandle, repo: String, id: String) -> Result<(), String> {
         super::delete(&base(&app)?, &repo, &id)
     }
 }

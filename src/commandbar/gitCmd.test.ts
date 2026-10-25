@@ -27,6 +27,13 @@ beforeEach(() => {
   ipc.gitStatus.mockResolvedValue(mk(3));
 });
 
+describe("Hub 보드 (S-2878)", () => {
+  it("hub: 경로면 git 을 부르지 않고 폴더 없음 답", async () => {
+    expect(await runGitOp("hub:ws-h1", "push")).toBe("This board has no folder, so git isn't available");
+    expect(ipc.gitStatus).not.toHaveBeenCalled();
+  });
+});
+
 describe("저장소 없음 (S-1062)", () => {
   it("repo 경로가 비었으면 git 을 부르지 않고 답한다", async () => {
     expect(await runGitOp("", "push")).toBe(NO_REPO);

@@ -1,6 +1,7 @@
 // B2 S-300·S-301·S-343: 열린 워크스페이스마다 보드를 마운트해 두고 보이는 하나만 display 로 드러낸다(콘솔이 안 죽는다).
 // 시작 흐름·Ctrl+Q·읽기 전용 배너·ResumeAll·종료 확인은 여기(예전 App.tsx 의 Workspace).
 import "../commandbar/exec"; // B12: 명령 실행기를 B9 연결점(setExecutor)에 등록
+import "../conversations/place"; // H3: 보드에 놓기 연결점(setPlaceHandler)
 import { useEffect } from "react";
 import Board from "../board/Board";
 import ComposerHost from "../composer/ComposerHost";
@@ -24,11 +25,15 @@ import MissionHost from "../mission/MissionHost";
 import MemoryHost from "../memory/MemoryHost";
 import LoopsHost from "../loops/LoopsHost";
 import UsagePanel from "../usage/UsagePanel";
+import ConversationsScreen from "../conversations/ConversationsScreen";
 import { useSettings } from "../settings/useSettings";
 import StudioHost from "../studio/StudioHost";
 import { confirmUnsaved } from "../studio/unsaved";
 import { AppNotice } from "../lib/notice";
+import { startupUpdateCheck } from "../update/check";
 import TopBar, { BAR_H } from "./TopBar";
+import { isHub } from "./hubPath";
+import { useUi } from "../ui/useUi";
 import { updateRepos } from "./workspaces";
 import { handleOf, loadWorkspace, useShell } from "./useShell";
 
@@ -46,6 +51,7 @@ export default function AppShell({ q }: { q: URLSearchParams }) {
   const list = repos.flatMap((r) => r.workspaces.map((w) => ({ ...w, path: r.path, visible: view === "board" && r.path === activeRepo && r.activeWs === w.id })));
   const shown = list.find((w) => w.visible);
 
+  useEffect(() => { if (isHub(activeRepo)) useUi.getState().closeGit(); }, [activeRepo]); // H5 S-2876: 열려 있던 Git 패널은 Hub 로 바뀌면 닫는다
   // 시작(S-324): 설정 reopenLastRepo 가 켜져 있고 lastRepo 폴더가 있으면 그 보드, 아니면 홈 화면(선택창 없음)
   useEffect(() => {
     void (async () => {
@@ -61,6 +67,7 @@ export default function AppShell({ q }: { q: URLSearchParams }) {
       });
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => startupUpdateCheck(), []); // 12묶음 Q2 S-3122
   // 열린 워크스페이스는 모두 불러온다(이미 불러온 것은 그대로)
   useEffect(() => {
     for (const r of repos) for (const w of r.workspaces) if (!w.loaded) void loadWorkspace({ id: w.id, name: w.name, repoPath: r.path });
@@ -107,6 +114,7 @@ export default function AppShell({ q }: { q: URLSearchParams }) {
       <LoopsHost />
       <StudioHost />
       <UsagePanel />
+      <ConversationsScreen />
       {view === "home" && <HomeScreen />}
       {list.map((w) =>
         w.loaded ? (
@@ -117,8 +125,8 @@ export default function AppShell({ q }: { q: URLSearchParams }) {
           </div>
         ) : null,
       )}
-      {shown && <GithubPill repo={shown.path} />}
-      {shown && <GitHost repo={shown.path} wsId={shown.id} />}
+      {shown && !isHub(shown.path) && <GithubPill repo={shown.path} />}
+      {shown && !isHub(shown.path) && <GitHost repo={shown.path} wsId={shown.id} />}
       {shown && <CommandBar wsId={shown.id} repo={shown.path} />}
       <VoiceHost ctx={shown ? { wsId: shown.id, repo: shown.path } : null} />
     </>

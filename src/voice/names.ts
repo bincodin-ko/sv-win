@@ -1,5 +1,6 @@
 // S-2210: 받아쓴 글에서 콘솔 이름과 소리가 비슷한 낱말을 정확한 이름으로 (순수)
 import { countOf } from "../commandbar/words";
+import { getLang } from "../i18n";
 import { ROLES } from "../commandbar/roles";
 
 /** 명령 낱말(파서가 읽는 말) — 이름으로 바꾸지 않고, 받아쓰기 힌트(--prompt)에도 준다 */
@@ -76,4 +77,10 @@ export function snapNames(text: string, names: string[], vocab: string[] = VOCAB
 }
 
 /** whisper --prompt 힌트: 콘솔 이름 + 명령 낱말. ponytail: 힌트가 길면 엔진이 앞부분만 쓴다(약 224 토큰) */
-export const promptHint = (names: string[], vocab: string[] = VOCAB) => [...names, ...vocab.slice(0, 20)].join(", ");
+const AGENTS = ["Claude Code", "Codex", "Gemini"];
+const KO_HINT = ["클로드", "코덱스", "제미나이", "띄워", "그룹"];
+/** language: 음성 언어 코드. auto 면 화면 언어. ko 면 한국어 낱말을 맨 앞에 (영어 힌트만 있으면 "클로드"가 close 로 들림) */
+export const promptHint = (names: string[], vocab: string[] = VOCAB, language = "auto") => {
+  const ko = language === "ko" || (language === "auto" && getLang() === "ko");
+  return [...(ko ? KO_HINT : []), ...AGENTS, ...names, ...vocab.slice(0, 20)].join(", ");
+};

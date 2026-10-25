@@ -6,12 +6,12 @@ import { menuNavKey } from "../../shell/Menu";
 export const menuBox: React.CSSProperties = { position: "absolute", zIndex: 30, minWidth: 170, background: "var(--surface)", border: "1px solid var(--bd)", borderRadius: 8, padding: 4, font: "12px system-ui", color: "var(--fg-2)", boxShadow: "0 6px 24px var(--scrim-50)" };
 export const itemStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 12, width: "100%", textAlign: "left", padding: "5px 8px", border: 0, borderRadius: 4, background: "none", color: "inherit", font: "inherit", cursor: "pointer" };
 
-type ItemProps = { label: string; onClick: () => void; extra?: React.ReactNode; style?: React.CSSProperties; [k: `data-${string}`]: string | undefined };
+type ItemProps = { label: string; title?: string; onClick: () => void; extra?: React.ReactNode; style?: React.CSSProperties; [k: `data-${string}`]: string | undefined };
 // label 은 영어 문장 — 그릴 때 번역한다(사전에 없으면 에이전트 이름처럼 그대로)
-export function Item({ label, onClick, extra, style, ...rest }: ItemProps) {
+export function Item({ label, title, onClick, extra, style, ...rest }: ItemProps) {
   const t = useT();
   return (
-    <button role="menuitem" {...rest} style={{ ...itemStyle, ...style }} onClick={onClick}>
+    <button role="menuitem" title={title} {...rest} style={{ ...itemStyle, ...style }} onClick={onClick}>
       <span>{t(label)}</span>
       {extra != null && <span aria-hidden>{extra}</span>}
     </button>

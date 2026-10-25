@@ -136,12 +136,12 @@ fn shell_open(target: &str) -> Result<(), String> {
 
 // ---- Tauri 명령 ----
 #[tauri::command]
-pub fn file_read(path: String) -> Result<Response, String> {
+pub async fn file_read(path: String) -> Result<Response, String> {
     std::fs::read(path).map(Response::new).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn file_stat(path: String) -> FileStat {
+pub async fn file_stat(path: String) -> FileStat {
     match std::fs::metadata(&path) {
         Ok(m) => FileStat {
             exists: true,
@@ -154,17 +154,17 @@ pub fn file_stat(path: String) -> FileStat {
 }
 
 #[tauri::command]
-pub fn file_text(path: String, max_bytes: u64) -> FileText {
+pub async fn file_text(path: String, max_bytes: u64) -> FileText {
     file_text_at(Path::new(&path), max_bytes)
 }
 
 #[tauri::command]
-pub fn dir_files(path: String, max: usize) -> Vec<String> {
+pub async fn dir_files(path: String, max: usize) -> Vec<String> {
     dir_files_at(Path::new(&path), max)
 }
 
 #[tauri::command]
-pub fn file_copy_into(src: String, dest_dir: String) -> Result<String, String> {
+pub async fn file_copy_into(src: String, dest_dir: String) -> Result<String, String> {
     copy_into(Path::new(&src), Path::new(&dest_dir)).map(|p| p.to_string_lossy().into_owned())
 }
 
@@ -175,12 +175,12 @@ pub fn save_shot(app_data: &Path, bytes: &[u8], hint: &str) -> Result<String, St
 }
 
 #[tauri::command]
-pub fn image_save(app: AppHandle, bytes: Vec<u8>, hint: String) -> Result<String, String> {
+pub async fn image_save(app: AppHandle, bytes: Vec<u8>, hint: String) -> Result<String, String> {
     save_shot(&app.path().app_data_dir().map_err(|e| e.to_string())?, &bytes, &hint)
 }
 
 #[tauri::command]
-pub fn fs_open(path: String) -> Result<(), String> {
+pub async fn fs_open(path: String) -> Result<(), String> {
     // F2 S-2233: Windows 설정 쪽지(ms-settings:privacy-microphone)는 파일이 아니라 주소 — 이것만 존재 검사 없이 연다
     if path.starts_with("ms-settings:") {
         return shell_open(&path);
@@ -192,7 +192,7 @@ pub fn fs_open(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn fs_reveal(path: String) -> Result<(), String> {
+pub async fn fs_reveal(path: String) -> Result<(), String> {
     if !Path::new(&path).exists() {
         return Err("not found".into());
     }
@@ -208,14 +208,18 @@ pub fn fs_reveal(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn open_url(url: String) -> Result<(), String> {
+pub async fn open_url(url: String) -> Result<(), String> {
     crate::web::check_http(&url)?;
     shell_open(&url)
 }
 
 /// 휴지통으로 보낸다(복구 가능). 절대 경로만 — 상대 경로는 SHFileOperation 이 휴지통을 건너뛸 수 있다
 #[tauri::command]
-pub fn trash_move(path: String) -> Result<(), String> {
+pub async fn trash_move(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || trash_move_sync(path)).await.map_err(|e| e.to_string())?
+}
+
+pub fn trash_move_sync(path: String) -> Result<(), String> {
     #[cfg(windows)]
     {
         use windows_sys::Win32::UI::Shell::{SHFileOperationW, SHFILEOPSTRUCTW};
@@ -353,9 +357,9 @@ mod tests {
 
     #[test]
     fn open_url_rejects_non_http() {
-        assert!(open_url("file:///C:/Windows/notepad.exe".into()).is_err());
-        assert!(open_url("javascript:alert(1)".into()).is_err());
-        assert!(open_url("C:\\Windows\\notepad.exe".into()).is_err());
+        assert!(tauri::async_runtime::block_on(open_url("file:///C:/Windows/notepad.exe".into())).is_err());
+        assert!(tauri::async_runtime::block_on(open_url("javascript:alert(1)".into())).is_err());
+        assert!(tauri::async_runtime::block_on(open_url("C:\\Windows\\notepad.exe".into())).is_err());
     }
 
     #[cfg(windows)]
@@ -364,7 +368,7 @@ mod tests {
         let d = tmp("trash");
         let f = d.join("gone.txt");
         fs::write(&f, "x").unwrap();
-        trash_move(f.to_string_lossy().into_owned()).unwrap();
+        trash_move_sync(f.to_string_lossy().into_owned()).unwrap();
         assert!(!f.exists());
         let _ = fs::remove_dir_all(&d);
     }

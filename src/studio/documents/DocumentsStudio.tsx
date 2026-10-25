@@ -90,9 +90,9 @@ export default function DocumentsStudio({ arg }: { arg?: string }) {
   return (
     <StudioFrame title={studioTitle("Documents")} onClose={closeStudioRequest} left={
       <div style={{ paddingTop: 10 }}>
-        <div data-testid="doc-agents" style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+        <div data-testid="doc-agents" style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "0 12px 10px" }}>
           {agents.map((a) => (
-            <button key={a.id} data-testid={`doc-agent-${a.id}`} aria-pressed={a.id === chosen.id} disabled={!a.installed} title={a.installed ? a.name : t("not found on PATH")}
+            <button key={a.id} data-testid={`doc-agent-${a.id}`} aria-pressed={a.id === chosen.id} disabled={!a.installed} title={a.installed ? a.name : a.why ?? t("not found on PATH")}
               onClick={() => useSettings.getState().patch({ docsAgent: a.id })}
               style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", borderRadius: 8, border: `1px solid ${a.id === chosen.id ? "var(--accent)" : "var(--studio-line)"}`, background: "transparent", color: "var(--text)", font: "12px system-ui", cursor: a.installed ? "pointer" : "not-allowed", opacity: a.installed ? 1 : 0.4 }}>
               <span aria-hidden style={{ width: 20, height: 20, borderRadius: 10, display: "grid", placeItems: "center", background: "var(--surface-2)", font: "600 11px system-ui" }}>{a.name[0]}</span>
@@ -100,6 +100,7 @@ export default function DocumentsStudio({ arg }: { arg?: string }) {
             </button>
           ))}
         </div>
+        {agents.filter((a) => a.why).map((a) => <div key={a.id} data-testid={`doc-why-${a.id}`} style={{ padding: "0 12px 8px", color: "var(--text-dim)", font: "12px system-ui" }}>{a.why}</div>)}
         <EffortChips agent={chosen.id} effort={effort} versions={versions} onPick={(e) => useSettings.getState().patch({ docsEffort: e })} />
         <DocList docId={view.docId} versions={versions} ask={view.ask} onPick={(id) => select(repo, { docId: id })} onAsk={(t) => select(repo, { docId: "ask", ask: t })} />
       </div>

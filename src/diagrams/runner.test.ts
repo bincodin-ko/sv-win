@@ -21,6 +21,12 @@ describe("S-2028·S-2030 failMessage", () => {
   it("막힘은 대신 답하지 않는다는 안내", () => {
     expect(failMessage({ blocked: true, why: "trust?" }, "Codex")).toBe("Codex is asking a question Symvibe will not answer for you. Open a console in this repo, answer it there, and try again.");
   });
+  it("권한 질문 막힘은 질문 줄과 설정 안내(콘솔 안내 아님)", () => {
+    const m = failMessage({ blocked: true, why: "Bash command\n git push\nDo you want to proceed?\n 1. Yes" }, "Claude Code");
+    expect(m).toContain("Claude Code asked for permission to use a tool:");
+    expect(m).toContain("git push");
+    expect(m).not.toContain("Open a console");
+  });
   it("오류는 그 문구", () => {
     expect(failMessage({ error: "spawn failed" }, "Codex")).toBe("spawn failed");
   });

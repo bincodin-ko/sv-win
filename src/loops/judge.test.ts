@@ -66,6 +66,17 @@ describe("S-1470 judgeGoal", () => {
     const { v } = await judge(agentGoal(), null, { first: "Select login method\r\n", tail: 1000 });
     expect(v).toBe("unknown");
   });
+  it("Q3 S-3151: g.agent 가 gemini 면 gemini 를 연다(claude 만 --session-id), 모르는 값이면 claude", async () => {
+    localStorage.setItem("symvibe.fakeInstalled", JSON.stringify(["gemini"]));
+    (window as unknown as { __fakeSessions?: Record<string, string> }).__fakeSessions = { gemini: "g-1" }; // 가짜 세션 찾기
+    await judge(loop({ mode: "agent", text: "t", agent: "gemini" }), "MET");
+    expect(fakePty.spawns().at(-1)!.args).not.toContain("--session-id");
+    delete w.__fakeReply; // 앞 판정의 답이 baseline 이 되지 않게
+    await judge(loop({ mode: "agent", text: "t", agent: "weird" }), "MET");
+    expect(fakePty.spawns().at(-1)!.args).toContain("--session-id");
+    localStorage.removeItem("symvibe.fakeInstalled");
+    delete (window as unknown as { __fakeSessions?: unknown }).__fakeSessions;
+  }, 30_000); // 판정 두 번 = 진짜 150ms 대기가 단계마다 끼어 기본 5초를 넘는다
   it("에이전트 목표가 아니면 세션을 열지 않고 unknown", async () => {
     const before = fakePty.spawns().length;
     expect(await judgeGoal(loop({ mode: "command", text: "npm test" }), REPO)).toBe("unknown");
