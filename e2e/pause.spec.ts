@@ -54,3 +54,20 @@ test("S-622 PAUSED 콘솔 다시 시작 → 재개 뒤 kill, 새 PTY 는 멈춰 
   await expect.poll(() => ops(page, 1)).toEqual(["pause", "resume", "kill"]);
   expect((await ctl(page)).filter((c) => c.id > 2 && c.op === "pause")).toHaveLength(0);
 });
+
+test("녹화 rec_1026_012130: 알약 바로 아래(헤더 안)를 눌러도 일시정지되고, 글자가 바뀌어도 알약 자리·너비가 그대로", async ({ page }) => {
+  await emit(page, 1, "hi");
+  await expect(pills(page).nth(0)).toHaveText("RUNNING", { timeout: 4000 });
+  const pill = pills(page).nth(0).locator("span");
+  const a = (await pill.boundingBox())!;
+  const btn = (await pills(page).nth(0).boundingBox())!;
+  expect(btn.height).toBeGreaterThanOrEqual(24); // 누르는 범위가 알약보다 위아래로 넓다
+  await page.mouse.click(a.x + a.width / 2, a.y + a.height + 5); // 알약 바로 아래
+  await expect(pills(page).nth(0)).toHaveText("PAUSED");
+  expect((await ops(page, 1))).toContain("pause");
+  const b = (await pill.boundingBox())!;
+  expect(Math.abs(b.x - a.x)).toBeLessThan(1);
+  expect(Math.abs(b.width - a.width)).toBeLessThan(1);
+  await page.mouse.click(a.x + a.width / 2, a.y - 2); // 알약 바로 위(맨 위 5px 는 크기 조절 가장자리) → 다시 재개
+  await expect(pills(page).nth(0)).not.toHaveText("PAUSED");
+});

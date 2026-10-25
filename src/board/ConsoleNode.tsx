@@ -195,7 +195,10 @@ function ConsoleNode({ id }: { id: string }) {
         )}
         <button type="button" data-testid="console-status" data-status={status} aria-pressed={status === "PAUSED"} title={status !== "PAUSED" && detail ? `${t("Click to pause/resume")} · ${detail}` : t("Click to pause/resume")}
           onClick={() => session.current && toggleSession(session.current)} // 1-6: 그 콘솔만 일시정지/재개(Enter·Space 는 button 기본)
-          style={{ border: 0, cursor: "pointer", background: PILL[status], color: PILL_FG[status], borderRadius: 999, padding: "1px 8px", font: "600 10px system-ui", letterSpacing: ".04em" }}>{statusLabel(status)}</button>
+          // 누르는 범위 = 헤더 높이 거의 전부(알약 위아래 빈 곳 클릭이 끌기로 새지 않게), 알약 너비 고정(글자가 바뀌어도 자리가 안 움직이게)
+          style={{ border: 0, cursor: "pointer", background: "transparent", color: PILL_FG[status], height: 28, padding: "0 2px", display: "flex", alignItems: "center", font: "600 10px system-ui", letterSpacing: ".04em" }}>
+          <span style={{ background: PILL[status], borderRadius: 999, padding: "1px 8px", minWidth: 64, textAlign: "center", whiteSpace: "nowrap" }}>{statusLabel(status)}</span>
+        </button>
         <button data-testid="console-maximize" title={maxed ? t("Restore") : t("Maximize")} aria-label={maxed ? t("Restore") : t("Maximize")} style={iconBtn} onClick={() => toggleMax(sessionKey(wsId, id))}>{maxed ? "⤡" : "⤢"}</button>
         <button data-testid="console-restart" title={t("Restart")} aria-label={t("Restart")} style={iconBtn} onClick={() => void requestRestart(id, undefined, sc)}>↻</button>
         <button data-testid="console-duplicate" title={t("Duplicate")} aria-label={t("Duplicate")} style={iconBtn} onClick={duplicate}>⧉</button>
