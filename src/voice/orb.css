@@ -1,0 +1,9 @@
+/* S-2270 orb 상태: idle 가만히 / listening 천천히 커졌다 작아졌다 / thinking 도는 모양 / speaking 숨쉬듯. 색은 --voice-* */
+[data-testid="bar-orb"][data-state="listening"], [data-testid="bar-orb"][data-state="thinking"], [data-testid="bar-orb"][data-state="speaking"] { --voice-orb: var(--voice-orb-hot); }
+[data-testid="bar-orb"][data-state="listening"] { animation: orb-pulse 1.6s ease-in-out infinite; }
+[data-testid="bar-orb"][data-state="thinking"] { animation: orb-spin 1s linear infinite; box-shadow: inset -5px 0 0 -1px rgba(255, 255, 255, 0.55); }
+[data-testid="bar-orb"][data-state="speaking"] { animation: orb-breathe 2.2s ease-in-out infinite; }
+@keyframes orb-pulse { 50% { transform: scale(1.25); } }
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+@keyframes orb-breathe { 50% { transform: scale(1.1); opacity: 0.75; } }
+@media (prefers-reduced-motion: reduce) { [data-testid="bar-orb"] { animation: none !important; } }

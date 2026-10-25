@@ -1,0 +1,62 @@
+/* S-361: 색은 변수로만. Light 값은 추측(S-362, 4B에서 확인). OG 값 = 1묶음 하드코딩 값(화면 대조는 이 파일만 고친다). */
+:root, [data-theme="og"] {
+  --bg: #0b0b0d; --panel: #141417; --panel-2: #1c1c21; --border: #2a2a31; --text: #ececf0; --text-dim: #8d8d98;
+  --accent: #f97316; --cyan: #22d3ee; --violet: #a78bfa; --accent-text: #111; --on-fill: #fff; --danger: #ef4444; --ok: #22c55e; --warn: #eab308; --grid-dot: #26262c; --scrim: rgba(0, 0, 0, 0.55);
+  --surface: #1c1c1f; --surface-2: #26262a; --well: #0e0e10; --chip: #3b3b46;
+  --bd: #333; --bd-2: #444; --bd-3: #3a3a40;
+  --fg: #eee; --fg-2: #ddd; --fg-3: #ccc; --fg-4: #bbb; --mute: #888; --mute-2: #999; --mute-3: #666;
+  --accent-ink: #111; --accent-2: #f08a24; --danger-btn: #d33; --danger-2: #dc2626; --info: #3b82f6; --err-text: #f87171; --err-2: #e5484d;
+  --tok-claude: #f97316; --tok-codex: #5aa6ff; --usage-amber: #f59e0b; --usage-red: #ef4444; --heat-claude-0: #26262c; --heat-claude-1: #5a2d0c; --heat-claude-2: #9a4a14; --heat-claude-3: #d9661a; --heat-claude-4: #f97316; --heat-codex-0: #26262c; --heat-codex-1: #123456; --heat-codex-2: #1d5a9e; --heat-codex-3: #2f80d8; --heat-codex-4: #5aa6ff;
+  --guide-2: #22d3ee; --warn-2: #f59e0b; --warn-bg: #5a4a00; --warn-fg: #fff;
+  --syn-comment: var(--mute); --syn-string: var(--ok); --syn-number: var(--warn-2); --syn-keyword: var(--accent-2);
+  --scrim-50: rgba(0, 0, 0, 0.5); --scrim-45: rgba(0, 0, 0, 0.45); --scrim-40: rgba(0, 0, 0, 0.4);
+  --ink-red: #ef4444; --ink-orange: #f97316; --ink-yellow: #eab308; --ink-green: #22c55e; --ink-blue: #3b82f6; --ink-violet: #a78bfa; --ink-white: #f5f5f5; --ink-black: #111111;
+  --note-amber: #f59e0b; --note-sage: #84a98c; --note-sky: #38bdf8; --note-violet: #a78bfa; --note-rose: #fb7185; --note-teal: #14b8a6;
+  --paper-yellow: #fde68a; --paper-pink: #fbcfe8; --paper-blue: #bae6fd; --paper-green: #bbf7d0; --paper-orange: #fed7aa; --paper-lilac: #ddd6fe; --paper-ink: #1d1b16; --paper-shadow: rgba(0, 0, 0, 0.28); --paper-fold: rgba(0, 0, 0, 0.22);
+  --mem-architecture: #60a5fa; --mem-structure: #34d399; --mem-commands: #f59e0b; --mem-conventions: #a78bfa; --mem-gotchas: #f87171; --mem-context: #94a3b8;
+  --studio-bg: var(--panel); --studio-side: var(--panel-2); --studio-line: var(--border); --studio-sel: var(--surface-2); --studio-scrim: var(--scrim);
+  --studio-graph-bg: #14151a; --studio-graph-line: #4b4e57; --studio-graph-node: #f5f5f5; --studio-graph-hot: var(--ink-orange); --studio-graph-text: #d4d4d8;
+  --doc-paper: #fff; --doc-ink: #1f1f23; --doc-ink-dim: #6b6b76; --doc-line: #e4e4e7; --doc-skel: #e7e7ea; --doc-note-bg: #fff7ed; --doc-note-bar: #f97316; --doc-stop: #dc2626; --doc-well: #f4f4f5; --doc-accent: #c2410c; /* E6 Documents: 종이는 테마와 상관없이 흰색 */
+}
+[data-theme="light"] {
+  --bg: #f7f4ee; --panel: #fffdf8; --panel-2: #efebe2; --border: #d9d3c6; --text: #1d1b16; --text-dim: #6f6a5e;
+  --accent: #c2410c; --cyan: #0891b2; --violet: #7c3aed; --accent-text: #fff; --on-fill: #fff; --danger: #dc2626; --ok: #16a34a; --warn: #ca8a04; --grid-dot: #d9d3c6; --scrim: rgba(40, 30, 10, 0.35);
+  --surface: #fffdf8; --surface-2: #efebe2; --well: #f1ede4; --chip: #6b655a;
+  --bd: #d9d3c6; --bd-2: #c4bcab; --bd-3: #cfc8ba;
+  --fg: #1d1b16; --fg-2: #2a2721; --fg-3: #3a362d; --fg-4: #4a463b; --mute: #6f6a5e; --mute-2: #6a6558; --mute-3: #766f60;
+  --accent-ink: #fff; --accent-2: #b45309; --danger-btn: #b91c1c; --danger-2: #b91c1c; --info: #1d4ed8; --err-text: #b91c1c; --err-2: #c62828;
+  --tok-claude: #c2410c; --tok-codex: #1d4ed8; --usage-amber: #b45309; --usage-red: #dc2626; --heat-claude-0: #e6e0d2; --heat-claude-1: #f6c9a4; --heat-claude-2: #ee9b5c; --heat-claude-3: #e0702a; --heat-claude-4: #c2410c; --heat-codex-0: #e6e0d2; --heat-codex-1: #bcd6f5; --heat-codex-2: #7fb0ea; --heat-codex-3: #3f86d8; --heat-codex-4: #1d4ed8;
+  --guide-2: #0891b2; --warn-2: #b45309; --warn-bg: #fcefb4; --warn-fg: #3b2f00;
+  --scrim-50: rgba(40, 30, 10, 0.35); --scrim-45: rgba(40, 30, 10, 0.32); --scrim-40: rgba(40, 30, 10, 0.28);
+  --ink-red: #dc2626; --ink-orange: #ea580c; --ink-yellow: #ca8a04; --ink-green: #16a34a; --ink-blue: #2563eb; --ink-violet: #7c3aed; --ink-white: #ffffff; --ink-black: #1d1b16;
+  --note-amber: #b45309; --note-sage: #4d7c5b; --note-sky: #0369a1; --note-violet: #6d28d9; --note-rose: #be123c; --note-teal: #0f766e;
+  --paper-yellow: #fde68a; --paper-pink: #fbcfe8; --paper-blue: #bae6fd; --paper-green: #bbf7d0; --paper-orange: #fed7aa; --paper-lilac: #ddd6fe; --paper-ink: #1d1b16; --paper-shadow: rgba(0, 0, 0, 0.28); --paper-fold: rgba(0, 0, 0, 0.22);
+  --mem-architecture: #1d4ed8; --mem-structure: #047857; --mem-commands: #b45309; --mem-conventions: #6d28d9; --mem-gotchas: #b91c1c; --mem-context: #475569;
+  --studio-bg: var(--panel); --studio-side: var(--panel-2); --studio-line: var(--border); --studio-sel: var(--surface-2); --studio-scrim: var(--scrim);
+  --studio-graph-bg: #14151a; --studio-graph-line: #4b4e57; --studio-graph-node: #f5f5f5; --studio-graph-hot: var(--ink-orange); --studio-graph-text: #d4d4d8;
+}
+
+/* F3 음성: orb 상태 색(주황 계열)·녹음 빨강. 값은 추측(4B) */
+:root {
+  --voice-orb: radial-gradient(circle at 35% 30%, #9db4ff, #4b5bd6 70%);
+  --voice-orb-hot: radial-gradient(circle at 35% 30%, #fdba74, var(--accent) 70%);
+  --voice-rec: #ef4444; --voice-wave: #fdba74; --voice-notice: #fbbf24; --voice-pill-bg: #1c1c1f;
+}
+
+/* 5묶음 E7 Skills 관리자 */
+:root { --skill-warn: var(--warn); --skill-code-bg: var(--well); --skill-dim-opacity: 0.5; }
+
+/* E3 Diagrams 패널·진행 카드 (S-2021·S-2025) */
+:root { --dia-panel-w: 300px; --dia-card-w: 340px; --dia-dash: var(--fg-3); }
+
+/* S-2406: 한국어 화면에서만 한글 글꼴(영어 화면은 그대로) */
+html[lang="ko"] body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+
+/* S-2664·S-2665: 키보드 포커스 윤곽은 전역 한 곳에서(all: unset·인라인 outline 도 이김). 입력란 껍질이 테두리를 맡는 명령줄은 제외 */
+:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 2px !important; }
+[data-testid="bar-input"]:focus-visible { outline: none !important; }
+@media (forced-colors: active) { :focus-visible { outline: 2px solid Highlight !important; } }
+
+/* 9묶음 P4 저사양 모드: <html data-lowspec> 일 때 움직임·그림자 끔 */
+[data-lowspec] { --paper-shadow: transparent; }
+[data-lowspec] *, [data-lowspec] *::before, [data-lowspec] *::after { animation: none !important; transition: none !important; box-shadow: none !important; }
