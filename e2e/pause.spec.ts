@@ -71,3 +71,27 @@ test("녹화 rec_1026_012130: 알약 바로 아래(헤더 안)를 눌러도 일�
   await page.mouse.click(a.x + a.width / 2, a.y - 2); // 알약 바로 위(맨 위 5px 는 크기 조절 가장자리) → 다시 재개
   await expect(pills(page).nth(0)).not.toHaveText("PAUSED");
 });
+
+// 141번: 멈춘 콘솔을 크게 보기 하면 cols/rows 는 그대로(멈춘 프로그램은 다시 못 그린다) 글꼴만 키워 화면을 채운다. 재개하면 원래 글꼴로 새 크기에 맞춘다
+test("141번 멈춘 콘솔 크게 보기 — 글꼴만 커지고, 재개하면 새 크기", async ({ page }) => {
+  const st = () => page.evaluate(() => { const t = (window as any).__terms.get(1); return { cols: t.cols as number, rows: t.rows as number, font: t.options.fontSize as number }; });
+  const resizes = () => page.evaluate(() => ((window as any).__fakePty.resizes(1) as unknown[]).length);
+  await emit(page, 1, "hello");
+  await pills(page).nth(0).click();
+  await expect(pills(page).nth(0)).toHaveText("PAUSED");
+  const a = await st(), n = await resizes();
+  await page.getByTestId("console-maximize").nth(0).click();
+  await expect.poll(async () => (await st()).font).toBeGreaterThan(a.font * 1.3);
+  const b = await st();
+  expect([b.cols, b.rows]).toEqual([a.cols, a.rows]);
+  expect(await resizes()).toBe(n); // 멈춘 동안 PTY 크기를 안 바꾼다
+  const body = (await page.getByTestId("console").nth(0).boundingBox())!;
+  const w = async () => (await page.locator(".xterm-screen").nth(0).boundingBox())!.width;
+  await expect.poll(w).toBeLessThanOrEqual(body.width); // 넘치지 않는다
+  expect(await w()).toBeGreaterThan(body.width * 0.6); // 넓게 채운다(세로가 막히면 옆이 빈다)
+  await pills(page).nth(0).click();
+  await expect(pills(page).nth(0)).not.toHaveText("PAUSED");
+  await expect.poll(async () => (await st()).cols).toBeGreaterThan(a.cols);
+  expect((await st()).font).toBe(a.font);
+  expect(await resizes()).toBeGreaterThan(n);
+});

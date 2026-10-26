@@ -5,7 +5,8 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { askPasteCheck } from "../console/PasteCheck";
 import { altPlain, imeKeyBlocked, isStrayPaste, joinOneLine, mapKey, pasteLineCount, sanitizePaste } from "./input";
 import { hookIme } from "./ime";
-import { fontSizeFor } from "./textSize";
+import { fixImeSpot } from "./imeSpot";
+import { fontSizeFor, zoomFont } from "./textSize";
 import { termTheme, type Mode } from "../theme/palette";
 import { useSettings } from "../settings/useSettings";
 import { isLowSpec } from "../perf/lowSpec";
@@ -60,6 +61,8 @@ export interface TermHandle {
   fit: () => void;
   /** S-073: 글자 크기 배율(%) 적용. null = 전역(100) */
   setTextSize: (pct: number | null) => void;
+  /** 141번 멈춤(PAUSED): 켜면 cols/rows 를 그대로 두고 칸 크기에 맞춰 글꼴만 키운다(멈춘 프로그램은 새 크기로 다시 못 그린다). 끄면 원래 글꼴로 맞춘다 */
+  freeze: (on: boolean) => void;
   dispose: () => void;
 }
 
@@ -76,8 +79,25 @@ export function createTerminal(el: HTMLElement): TermHandle {
   for (const ident of [0, 1, 2, 8, 52]) term.parser.registerOscHandler(ident, () => true); // 제목 0·1·2, 하이퍼링크 8, 클립보드 52: 처리한 것으로 치고 버림
   fixScaledMouse(term);
   const unhook = hookInput(term);
+  let font = term.options.fontSize!; // 멈춤이 아닐 때의 글꼴
+  let frozen: { w: number; h: number; f: number } | null = null; // 멈춘 순간의 화면 크기와 글꼴
   const fit = () => {
-    if (el.clientWidth > 0 && el.clientHeight > 0) fitAddon.fit();
+    if (el.clientWidth <= 0 || el.clientHeight <= 0) return;
+    if (!frozen) return fitAddon.fit();
+    const s = el.querySelector<HTMLElement>(".xterm-screen");
+    if (!frozen.w && s?.offsetWidth) frozen = { w: s.offsetWidth, h: s.offsetHeight, f: frozen.f }; // 숨어 있다가 처음 보일 때 잰다
+    if (!frozen.w) return;
+    term.options.fontSize = zoomFont(frozen.f, frozen.w, frozen.h, el.clientWidth, el.clientHeight);
+    // 글자 폭이 글꼴에 딱 비례하지 않아 몇 % 넘칠 수 있다 → 그려진 뒤 재서 0.5px 씩 줄인다(최대 8번)
+    let tries = 8;
+    const trim = () => {
+      if (!frozen || !s || tries-- <= 0) return;
+      if ((s.offsetWidth > el.clientWidth || s.offsetHeight > el.clientHeight) && term.options.fontSize! > 6) {
+        term.options.fontSize = term.options.fontSize! - 0.5;
+        requestAnimationFrame(trim);
+      }
+    };
+    requestAnimationFrame(trim);
   };
   fit();
   // S-411: 테마가 바뀌면 팔레트만 갈아 끼운다(세션·버퍼 그대로)
@@ -120,7 +140,19 @@ export function createTerminal(el: HTMLElement): TermHandle {
     term,
     fit,
     setTextSize: (pct) => {
-      term.options.fontSize = fontSizeFor(pct, globalSize()); // S-073: 바뀌면 fit → onResize → PTY resize
+      font = fontSizeFor(pct, globalSize()); // S-073: 바뀌면 fit → onResize → PTY resize
+      if (!frozen) term.options.fontSize = font; // 멈춘 동안엔 재개할 때 적용
+      fit();
+    },
+    freeze: (on) => {
+      if (on === !!frozen) return;
+      if (on) {
+        const s = el.querySelector<HTMLElement>(".xterm-screen");
+        frozen = { w: s?.offsetWidth ?? 0, h: s?.offsetHeight ?? 0, f: font };
+      } else {
+        frozen = null;
+        term.options.fontSize = font;
+      }
       fit();
     },
     dispose: () => {
@@ -192,6 +224,7 @@ function hookInput(term: Terminal): () => void {
     void paste(e.clipboardData?.getData("text/plain") ?? "");
   };
   ta?.addEventListener("paste", onPaste, true);
+  fixImeSpot(term); // 커서를 숨긴 Claude 에서도 조합 글자를 입력 줄에(rec_1026_235106)
   const unIme = ta ? hookIme(ta, (d) => term.input(d, true), () => { const h = (term as unknown as { _core?: { _compositionHelper?: { _isSendingComposition?: boolean } } })._core?._compositionHelper; if (h) h._isSendingComposition = false; }) : () => {}; // 조합 끝 Space 순서(perf-real ⑥)
   return () => { unguard(); unIme(); ta?.removeEventListener("paste", onPaste, true); root?.removeEventListener("mousedown", onRight, true); root?.removeEventListener("contextmenu", onRight, true); };
 }

@@ -100,3 +100,21 @@ test("CDP 조합 중 Backspace — 조합만 지우면 아무것도 안 감", as
   await sleep(300);
   expect(await writes(page)).toBe("");
 });
+
+// 녹화 rec_1026_235106: Claude 가 일하는 중엔 커서를 숨기고 오른쪽 아래에 둔다 → 조합 글자가 오른쪽 아래에 떴다. 입력 줄 글 끝에 떠야 한다
+test("CDP 커서 숨긴 Claude — 조합 글자는 입력 줄에", async ({ page }) => {
+  const bar = "─".repeat(30);
+  await page.evaluate((s) => { const f = (window as any).__fakePty; f.emit(f.ids()[0], s); },
+    `\x1b[2J\x1b[H● Manifesting… (running PreToolUse hooks… 3/4)\r\n${bar}\r\n❯\u00a0ㅇㅇ\r\n${bar}\r\n  bypass permissions on\x1b[?25l\x1b[999;999H`);
+  await sleep(300);
+  await raw("KeyD"); await comp("ㅇ"); await up("d", "KeyD", 68); await sleep(200);
+  const r = await page.evaluate(() => {
+    const v = document.querySelector(".composition-view") as HTMLElement, s = (document.querySelector(".xterm-screen") as HTMLElement).getBoundingClientRect();
+    const a = v.getBoundingClientRect(), rows = ([...(window as any).__terms.values()][0]).rows as number;
+    return { on: v.classList.contains("active"), text: v.textContent, row: Math.round((a.top - s.top) / (s.height / rows)), dx: a.left - s.left, w: s.width };
+  });
+  console.log("SPOT", JSON.stringify(r));
+  expect(r).toMatchObject({ on: true, text: "ㅇ", row: 2 }); // 셋째 줄(❯ 줄)
+  expect(r.dx).toBeLessThan(r.w / 3); // 오른쪽 끝이 아니라 "❯ ㅇㅇ" 뒤
+  await commit("ㅇ"); await sleep(200);
+});

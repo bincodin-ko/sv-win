@@ -116,6 +116,7 @@ function ConsoleNode({ id }: { id: string }) {
   const textSize = node && isConsole(node) ? node.textSize : null;
   const globalSize = useSettings((s) => s.s.textSize);
   useEffect(() => term.current?.setTextSize(textSize), [textSize, globalSize]); // S-073·S-363
+  useEffect(() => term.current?.freeze(status === "PAUSED"), [status]); // 141번 멈춘 동안 크게 보기는 글꼴만 키운다
 
   if (!isConsole(node)) return null;
 
