@@ -199,7 +199,11 @@ function ConsoleNode({ id }: { id: string }) {
           style={{ border: 0, cursor: "pointer", background: "transparent", color: PILL_FG[status], height: 28, padding: "0 2px", display: "flex", alignItems: "center", font: "600 10px system-ui", letterSpacing: ".04em" }}>
           <span style={{ background: PILL[status], borderRadius: 999, padding: "1px 8px", minWidth: 64, textAlign: "center", whiteSpace: "nowrap" }}>{statusLabel(status)}</span>
         </button>
-        <button data-testid="console-maximize" title={maxed ? t("Restore") : t("Maximize")} aria-label={maxed ? t("Restore") : t("Maximize")} style={iconBtn} onClick={() => toggleMax(sessionKey(wsId, id))}>{maxed ? "⤡" : "⤢"}</button>
+        {/* 크게 보기 중에는 아이콘 대신 글자 단추(⤢·⤡ 모양이 비슷해 헷갈림) */}
+        <button data-testid="console-maximize" title={maxed ? t("Restore") : t("Maximize")} aria-label={maxed ? t("Restore") : t("Maximize")} onClick={() => toggleMax(sessionKey(wsId, id))}
+          style={maxed ? { border: 0, borderRadius: 6, padding: "3px 10px", background: "var(--accent)", color: "var(--accent-text)", font: "600 11px system-ui", cursor: "pointer", whiteSpace: "nowrap" } : iconBtn}>
+          {maxed ? `↙ ${t("Restore")}` : "⤢"}
+        </button>
         <button data-testid="console-restart" title={t("Restart")} aria-label={t("Restart")} style={iconBtn} onClick={() => void requestRestart(id, undefined, sc)}>↻</button>
         <button data-testid="console-duplicate" title={t("Duplicate")} aria-label={t("Duplicate")} style={iconBtn} onClick={duplicate}>⧉</button>
         <button data-testid="console-close" title={t("Close")} aria-label={t("Close")} style={iconBtn} onClick={() => void requestClose([id], sc)}>✕</button>

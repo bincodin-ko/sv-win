@@ -57,10 +57,12 @@ test("1-4 크게 보기: 빈 머리줄 더블클릭 = 크게, 이름 더블클�
   expect(Math.round((await node(page).boundingBox())!.width)).toBeLessThan(1400);
   await page.keyboard.press("Escape");
   const h = (await page.locator("[data-node-handle]").first().boundingBox())!;
-  await page.mouse.dblclick(h.x + h.width - 200, h.y + h.height / 2);
+  await page.mouse.dblclick(h.x + h.width / 2, h.y + h.height / 2); // 가운데 = 빈 칸(오른쪽은 알약·단추가 넓어짐)
   await expect.poll(async () => Math.round((await node(page).boundingBox())!.width)).toBe(1400);
+  await expect(page.getByTestId("console-maximize").first()).toHaveText(/Restore/); // 크게 보기 중엔 글자 단추(아이콘 ⤢ 와 헷갈리지 않게)
   await page.getByTestId("console-maximize").first().click();
   await expect.poll(async () => Math.round((await node(page).boundingBox())!.width)).toBeLessThan(1400);
+  await expect(page.getByTestId("console-maximize").first()).toHaveText("⤢");
 });
 
 test("1-4 Ctrl+Shift+Enter = 선택된 콘솔 크게/복귀", async ({ page }) => {

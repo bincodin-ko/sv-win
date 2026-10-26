@@ -1,7 +1,7 @@
 // S-1130·S-1131: 웹 인스펙터 카드. 개발자 도구는 카드 안에 박지 않고(WebView2 한계) 별도 창으로 연다.
 import { useEffect, useRef, useState } from "react";
 import { useScope } from "../board/BoardScope";
-import { webWindowClose, webWindowOpen } from "../lib/ipc";
+import { onWebWindowClosed, webWindowClose, webWindowOpen } from "../lib/ipc";
 import { inspectWindow } from "./inspect";
 import type { Tab } from "./WebTile";
 import { tm, useT } from "../i18n";
@@ -21,6 +21,8 @@ export default function InspectorCard({ id }: { id: string }) {
   win.current = n?.wireTo ? inspectWindow(n.wireTo) : "";
   // 카드가 지워지면(타일 삭제의 연쇄 포함) 앱이 연 창도 닫는다. 워크스페이스 전환 같은 그냥 사라짐은 노드가 남아 있어 닫지 않는다
   useEffect(() => () => { if (win.current && !useBoard.getState().nodes[id]) void webWindowClose(win.current).catch(() => {}); }, [id, useBoard]);
+  // 검사 창을 X 로 닫으면 "열려 있음" 표시도 지운다(Rust window_label 과 같은 이름 규칙)
+  useEffect(() => onWebWindowClosed((l) => { if (win.current && l === `inspect-${win.current.replace(/[^A-Za-z0-9_-]/g, "_")}`) setOpened(false); }), []);
   if (!n) return null;
   const tab = tile?.tabs?.find((t) => t.id === n.tab);
   const reattach = () => tile?.active && useBoard.getState().updateNode(id, { tab: tile.active });

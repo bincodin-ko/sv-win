@@ -82,6 +82,8 @@ if (typeof window !== "undefined" && !isTauri()) Object.assign(window, { __fakeP
 export async function ptySpawn(o: SpawnOpts): Promise<number> {
   if (!isTauri()) {
     const id = ++nextId;
+    const slow = (window as unknown as { __fakeSpawnMs?: number }).__fakeSpawnMs; // 시험용: 실제 spawn 처럼 id 가 늦게 오게
+    if (slow) await new Promise((r) => setTimeout(r, slow));
     fakes.set(id, { onData: o.onData, onExit: o.onExit });
     spawnLog.push({ id, program: o.program, args: o.args ?? [], env: o.env, cwd: o.cwd });
     return id;
@@ -577,6 +579,12 @@ export async function webProbe(url: string): Promise<WebProbe> {
 export async function webWindowOpen(id: string, url: string): Promise<void> {
   if (isTauri()) return invoke("web_window_open", { id, url });
   webLog(`open ${id} ${url}`);
+}
+/** 검사 창이 (X 등으로) 닫혔다는 알림. 받는 값 = 창 label(inspect-<id>) */
+export function onWebWindowClosed(cb: (label: string) => void): () => void {
+  if (!isTauri()) return () => {};
+  const un = import("@tauri-apps/api/event").then((m) => m.listen<string>("web-window-closed", (e) => cb(e.payload)));
+  return () => void un.then((f) => f());
 }
 export async function webWindowClose(id: string): Promise<void> {
   if (isTauri()) return invoke("web_window_close", { id });

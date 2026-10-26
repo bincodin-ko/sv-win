@@ -2,11 +2,18 @@
 use crate::pty::PtyManager;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 /// 창 닫기(X·Alt+F4)를 막고 프론트에 "quit-requested" 를 보낸다.
 /// ponytail: 프론트가 죽어 있으면 창을 못 닫는다(작업 관리자로 끔) — 필요해지면 응답 시간 제한을 둔다.
+/// 메인 창만 가로챈다 — 웹 검사 창(`inspect-*`) 등 다른 창의 X 는 그 창만 닫혀야 한다.
 pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
+    if matches!(event, tauri::WindowEvent::Destroyed) && window.label().starts_with("inspect-") {
+        let _ = window.app_handle().emit("web-window-closed", window.label()); // 인스펙터 카드의 "열려 있음" 표시 지우기
+    }
+    if !intercepts_close(window.label()) {
+        return;
+    }
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
         let _ = window.emit("quit-requested", ());
@@ -27,8 +34,18 @@ pub fn app_quit(app: tauri::AppHandle, state: State<'_, PtyManager>) {
     });
 }
 
+fn intercepts_close(label: &str) -> bool {
+    label == "main"
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_main_window_close_quits_app() {
+        assert!(super::intercepts_close("main"));
+        assert!(!super::intercepts_close("inspect-w1"));
+    }
+
     #[cfg(windows)]
     #[test]
     fn job_kills_children() {

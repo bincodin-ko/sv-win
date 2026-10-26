@@ -181,13 +181,14 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
     gotOutput = false;
     send({ type: "spawn", mode: m });
     try {
+      let sc = 0, sr = 0; // spawn 에 넘긴 크기. 응답을 기다리는 사이 xterm 크기가 바뀌면 아래에서 한 번 더 알린다(y8)
       const id = await limitSpawn(() => ptySpawn({
         program: spec.program,
         args: spec.args,
         env: spec.env,
         cwd: o.cwd,
-        cols: term.cols,
-        rows: term.rows,
+        cols: (sc = term.cols),
+        rows: (sr = term.rows),
         onData: (b) => {
           if (g !== gen) return;
           bw.push(b);
@@ -216,6 +217,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
       if (g !== gen || disposed) return void ptyKill(id);
       ptyId = id;
       pw.setId(id);
+      if (term.cols !== sc || term.rows !== sr) void ptyResize(id, term.cols, term.rows);
       applyBatch();
       debugTerms.set(id, term);
     } catch (e) {

@@ -12,6 +12,7 @@ import { isLowSpec } from "../perf/lowSpec";
 import { createGlGate, scrollbackFor } from "./perf";
 
 const globalSize = () => Number(useSettings.getState().s.textSize) || 100; // S-363
+import { useUnicode11 } from "./unicode";
 import { debugTerms, isTauri, ptyKill, ptyResize, ptySpawn, ptyWrite } from "../lib/ipc";
 
 // ---- WebGL: 화면에 보이는 터미널만, 동시에 최대 12개(S-074. WebView2 문맥 한도 16). 못 얻은 보이는 터미널은 자리가 나길 기다린다.
@@ -67,9 +68,10 @@ const FIT_MS = 30; // S-063: 끄는 중 최대 30ms 마다
 
 /** xterm 하나를 el 안에 만든다. 링크 애드온 없음, 창 제목·OSC 52 무시(S-108), 스크롤백 1만(S-106, 저사양 3000). */
 export function createTerminal(el: HTMLElement): TermHandle {
-  const term = new Terminal({ scrollback: scrollbackFor(isLowSpec()), fontFamily: '"Cascadia Mono", Consolas, monospace', fontSize: fontSizeFor(null, globalSize()), theme: termTheme(curMode()), linkHandler: { activate() {}, hover() {}, allowNonHttpProtocols: false } }); // OSC 8 링크도 눌리지 않는다(S-108) // S-134
+  const term = new Terminal({ allowProposedApi: true, scrollback: scrollbackFor(isLowSpec()), fontFamily: '"Cascadia Mono", Consolas, monospace', fontSize: fontSizeFor(null, globalSize()), theme: termTheme(curMode()), linkHandler: { activate() {}, hover() {}, allowNonHttpProtocols: false } }); // OSC 8 링크도 눌리지 않는다(S-108) // S-134
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
+  useUnicode11(term); // 이모지 폭을 Claude 와 같게(y8)
   term.open(el);
   for (const ident of [0, 1, 2, 8, 52]) term.parser.registerOscHandler(ident, () => true); // 제목 0·1·2, 하이퍼링크 8, 클립보드 52: 처리한 것으로 치고 버림
   fixScaledMouse(term);

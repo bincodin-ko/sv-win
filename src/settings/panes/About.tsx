@@ -4,7 +4,8 @@ import { useT } from "../../i18n";
 import { openUrl } from "../../lib/ipc";
 import { checkUpdate, newerThan, type UpdateInfo } from "../../update/check";
 import { useSettings } from "../useSettings";
-export const APP_VERSION = "0.1.0"; // package.json version 과 맞춘다
+declare const __APP_VERSION__: string;
+export const APP_VERSION = __APP_VERSION__; // vite.config.ts 가 package.json version 을 넣는다
 type St = null | "checking" | "none" | "failed" | "same" | UpdateInfo;
 const dt = { color: "var(--text-dim)" };
 const dd = { margin: 0 };
