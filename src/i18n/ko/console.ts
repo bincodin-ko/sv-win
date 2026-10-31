@@ -20,6 +20,7 @@ export default {
   "Paste Lines": "여러 줄 붙여넣기",
   "Resume last conversation?": "지난 대화를 이어서 할까요?",
   "Resume": "이어서 하기",
+  "Start new": "새로 시작",
   "Dismiss": "닫기",
   // 저장 실패 알림·라이브 상태 안내 (U4)
   "Couldn't save the board. It will keep trying.": "보드를 저장하지 못했어요. 계속 다시 시도할게요.",

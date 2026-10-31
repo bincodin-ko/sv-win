@@ -123,3 +123,29 @@ test("S-230 실행 중 콘솔이 없으면 확인 없이 바로 끈다", async (
   await expect.poll(() => page.evaluate(() => (window as any).__fakeQuit)).toBeTruthy();
   await expect(page.getByTestId("quit-confirm")).toHaveCount(0);
 });
+
+// 431번: 끈 콘솔을 다시 시작하면 새 대화만 열렸다 → 끄면 배너('이어서 하기'·'새로 시작'), 이어서 하기 = 그 대화 --resume
+test("431번 끄기 → 배너 이어서 하기(같은 대화 --resume) / 새로 시작(새 --session-id)", async ({ page }) => {
+  await seed(page, []);
+  await expect.poll(async () => (await spawns(page)).length).toBe(2);
+  await expect(banners(page)).toHaveCount(0);
+  const first = (await spawns(page))[0]!;
+  const sid = first.args[first.args.indexOf("--session-id") + 1];
+  await page.getByTestId("live-chip").click();
+  await page.getByTestId("live-stop").first().click();
+  await expect(banners(page)).toHaveCount(1);
+  await expect(banners(page).getByTestId("resume-new")).toBeVisible();
+  await banners(page).getByTestId("resume-go").click();
+  await expect.poll(async () => (await resumed(page)).length).toBe(1);
+  expect((await resumed(page))[0]!.args).toEqual(["--resume", sid]);
+  await expect(banners(page)).toHaveCount(0);
+  // 다시 끄고 '새로 시작'
+  await page.getByTestId("live-chip").click();
+  await page.getByTestId("live-stop").first().click();
+  await expect(banners(page)).toHaveCount(1);
+  const n = (await spawns(page)).length;
+  await banners(page).getByTestId("resume-new").click();
+  await expect.poll(async () => (await spawns(page)).length).toBe(n + 1);
+  expect((await spawns(page)).at(-1)!.args[0]).toBe("--session-id");
+  await expect(banners(page)).toHaveCount(0);
+});

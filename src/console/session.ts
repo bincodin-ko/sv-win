@@ -318,10 +318,14 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
       patchResume({ lastChatAt: Date.now() }); // S-239: Enter 가 든 입력 = 대화했다
     }
   };
-  async function fetchReply(): Promise<string | null> {
+  /** 지금 이 콘솔의 에이전트 대화 id(진행 중 id → 저장된 id). 셸 등은 없음 */
+  const chatId = (): string | undefined => {
     const n = useBoard.getState().nodes[nodeId];
     const saved = isConsole(n) ? (n.resume as { claudeSessionId?: string; codexSessionId?: string } | undefined) : undefined;
-    const sid = agentId === "claude" ? (liveIds.claude ?? saved?.claudeSessionId) : agentId === "codex" ? (liveIds.codex ?? saved?.codexSessionId) : undefined;
+    return agentId === "claude" ? (liveIds.claude ?? saved?.claudeSessionId) : agentId === "codex" ? (liveIds.codex ?? saved?.codexSessionId) : undefined;
+  };
+  async function fetchReply(): Promise<string | null> {
+    const sid = chatId();
     const repo = consoleCwd(wsId, useBoard.getState().nodes[nodeId]);
     if (repo && sid) {
       const t = await lastReply(agentId, repo, sid, profDir).catch(() => null);
@@ -428,9 +432,16 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
       }
       return out;
     },
-    kill: () => { killPty(); send({ type: "exit", code: null }); }, // S-1257: 끈 콘솔은 DONE 으로 남는다
+    kill: () => {
+      killPty();
+      send({ type: "exit", code: null }); // S-1257: 끈 콘솔은 DONE 으로 남는다
+      // 431번: 끈 대화를 이어서 시작할 수 있게 배너('이어가기'·'새로 시작')를 띄운다. 다시 시작(restart)만 하면 새 대화였다
+      const sid = chatId();
+      if (sid && !disposed) useOffers.getState().add({ nodeId: key, agentId, sessionId: sid });
+    },
     dispose() {
       disposed = true;
+      useOffers.getState().drop(key); // 닫은 콘솔의 배너가 남지 않게
       killPty();
       subs.forEach((s) => s.dispose());
       unsubOffers();

@@ -201,6 +201,7 @@ test("167번 live chip 누르면 실행 중 CLI 목록 — 끄기(칸 남음)·�
   await expect(page.getByTestId("live-chip")).toHaveText("2 live");
   await expect(page.getByTestId("live-row")).toHaveCount(2);
   expect(await consoles.count()).toBe(total);
+  await expect(page.getByTestId("resume-banner")).toHaveCount(0); // 431번: 셸은 이어갈 대화가 없어 배너 없음
   // 닫기: 확인창 → 확인하면 칸도 지움
   await page.getByTestId("live-close").first().click();
   await page.getByTestId("confirm-close").getByRole("button", { name: "Close" }).click();
