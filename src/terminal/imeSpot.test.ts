@@ -34,3 +34,27 @@ describe("Claude 입력 줄 글 끝 찾기", () => {
     expect(promptCaret(t.buffer.active, t.rows)).toBeNull();
   });
 });
+
+// 대기열 3번: 조합 상자가 콘솔 왼쪽 위에 뜨던 것 — 커서가 화면 밖이어도 자리를 잡는다
+import { imeSpot } from "./imeSpot";
+describe("조합 글자 자리(imeSpot)", () => {
+  const lines = async (n: number, tail = "") => {
+    const term = new Terminal({ cols: 40, rows: 10, scrollback: 100, allowProposedApi: true });
+    await new Promise<void>((r) => term.write(Array.from({ length: n }, (_, i) => `line ${i}`).join("\r\n") + tail, r));
+    return term;
+  };
+  it("커서가 보이고 화면 안이면 커서 자리", async () => {
+    const t = await lines(3, "\r\n$ ab");
+    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, null)).toEqual({ x: 4, y: 3 });
+  });
+  it("위로 스크롤해 커서가 화면 밖이면 왼쪽 위(0,0)가 아니라 마지막 자리", async () => {
+    const t = await lines(40, "\r\n$ ab");
+    t.scrollLines(-20);
+    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, { x: 4, y: 9 })).toEqual({ x: 4, y: 9 });
+  });
+  it("마지막 자리도 없으면 커서를 화면 안으로 당긴 자리(맨 아래 줄)", async () => {
+    const t = await lines(40, "\r\n$ ab");
+    t.scrollLines(-20);
+    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, null)).toEqual({ x: 4, y: 9 });
+  });
+});

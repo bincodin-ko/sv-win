@@ -76,7 +76,7 @@ const FIT_MS = 30; // S-063: 끄는 중 최대 30ms 마다
 
 /** xterm 하나를 el 안에 만든다. 링크 애드온 없음, 창 제목·OSC 52 무시(S-108), 스크롤백 1만(S-106, 저사양 3000). */
 export function createTerminal(el: HTMLElement): TermHandle {
-  const term = new Terminal({ allowProposedApi: true, scrollback: scrollbackFor(isLowSpec()), fontFamily: '"Cascadia Mono", Consolas, monospace', fontSize: fontSizeFor(null, globalSize()), theme: termTheme(curMode()), linkHandler: { activate() {}, hover() {}, allowNonHttpProtocols: false } }); // OSC 8 링크도 눌리지 않는다(S-108) // S-134
+  const term = new Terminal({ allowProposedApi: true, scrollback: scrollbackFor(isLowSpec()), fontFamily: '"Cascadia Mono", Consolas, monospace', fontSize: fontSizeFor(null, globalSize()), theme: termTheme(curMode()), cursorStyle: "bar", cursorInactiveStyle: "bar", cursorBlink: true, linkHandler: { activate() {}, hover() {}, allowNonHttpProtocols: false } }); // OSC 8 링크도 눌리지 않는다(S-108) // S-134
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   useUnicode11(term); // 이모지 폭을 Claude 와 같게(y8)

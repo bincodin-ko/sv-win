@@ -118,3 +118,27 @@ test("CDP 커서 숨긴 Claude — 조합 글자는 입력 줄에", async ({ pag
   expect(r.dx).toBeLessThan(r.w / 3); // 오른쪽 끝이 아니라 "❯ ㅇㅇ" 뒤
   await commit("ㅇ"); await sleep(200);
 });
+
+// 대기열 3번: 위로 스크롤해 커서가 화면 밖일 때 조합 상자가 콘솔 왼쪽 위에 떴다. 그리고 바탕화면 터미널처럼 커서는 막대, 조합 글자는 글줄 위(밑줄)로
+test("CDP 대기열 3번 — 스크롤해도 조합 글자가 왼쪽 위에 안 뜨고, 글줄처럼 보이며, 커서는 막대", async ({ page }) => {
+  await page.evaluate(() => { const f = (window as any).__fakePty; f.emit(f.ids()[0], Array.from({ length: 80 }, (_, i) => `line ${i}`).join("\r\n") + "\r\n$ ab"); });
+  await sleep(300);
+  await page.evaluate(() => [...(window as any).__terms.values()][0].scrollLines(-30));
+  await sleep(200);
+  await raw("KeyD"); await comp("ㅇ"); await up("d", "KeyD", 68); await sleep(250);
+  const r = await page.evaluate(() => {
+    const t = [...(window as any).__terms.values()][0];
+    const v = document.querySelector(".composition-view") as HTMLElement, s = (document.querySelector(".xterm-screen") as HTMLElement).getBoundingClientRect();
+    const a = v.getBoundingClientRect(), cs = getComputedStyle(v);
+    return { on: v.classList.contains("active"), row: Math.round((a.top - s.top) / (s.height / t.rows)), col: Math.round((a.left - s.left) / (s.width / t.cols)), rows: t.rows,
+      bg: cs.backgroundColor, theme: (() => { const d = document.createElement("i"); d.style.color = t.options.theme.background; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; })(), deco: cs.textDecorationLine, cursor: t.options.cursorStyle, inactive: t.options.cursorInactiveStyle, blink: t.options.cursorBlink };
+  });
+  console.log("SPOT3", JSON.stringify(r));
+  expect(r.on).toBe(true);
+  expect(r.row).toBe(r.rows - 1); // 왼쪽 위(0)가 아니라 커서 줄을 화면 안으로 당긴 자리
+  expect(r.col).toBe(4);
+  expect(r.bg).toBe(r.theme); // 상자가 아니라 터미널 바탕색 위의 글자
+  expect(r.deco).toBe("underline");
+  expect([r.cursor, r.inactive, r.blink]).toEqual(["bar", "bar", true]);
+  await comp(""); await sleep(100);
+});
