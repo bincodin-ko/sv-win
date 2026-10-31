@@ -123,6 +123,54 @@ pub async fn web_window_close(app: AppHandle, id: String) -> Result<(), String> 
     }
 }
 
+fn tile_label(id: &str) -> String {
+    format!("tile-{}", id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect::<String>())
+}
+
+/// #107: iframe 을 막는 사이트(유튜브·구글)는 메인 창 위에 진짜 웹뷰 `tile-<id>` 를 겹쳐 띄운다(처음엔 숨김). 이미 있으면 그 주소로 이동
+#[tauri::command]
+pub async fn web_child_open(app: AppHandle, id: String, url: String) -> Result<(), String> {
+    check_http(&url)?;
+    let u: tauri::Url = url.parse().map_err(|_| "잘못된 주소".to_string())?;
+    let label = tile_label(&id);
+    if let Some(w) = app.get_webview(&label) {
+        return w.navigate(u).map_err(|e| e.to_string());
+    }
+    let win = app.get_window("main").ok_or("메인 창 없음")?;
+    let w = win
+        .add_child(tauri::webview::WebviewBuilder::new(&label, WebviewUrl::External(u)), tauri::LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(1.0, 1.0))
+        .map_err(|e| e.to_string())?;
+    w.hide().map_err(|e| e.to_string())
+}
+
+/// 타일 자리(메인 웹뷰 CSS px = 논리 px)·보드 줌·보이기. 가려졌거나 안 보이면 숨긴다
+#[tauri::command]
+pub async fn web_child_place(app: AppHandle, id: String, x: f64, y: f64, w: f64, h: f64, zoom: f64, show: bool) -> Result<(), String> {
+    let Some(v) = app.get_webview(&tile_label(&id)) else { return Ok(()) };
+    if !show || w < 2.0 || h < 2.0 {
+        return v.hide().map_err(|e| e.to_string());
+    }
+    v.set_bounds(tauri::Rect { position: tauri::LogicalPosition::new(x, y).into(), size: tauri::LogicalSize::new(w, h).into() }).map_err(|e| e.to_string())?;
+    v.set_zoom(zoom.clamp(0.25, 5.0)).map_err(|e| e.to_string())?;
+    v.show().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn web_child_reload(app: AppHandle, id: String) -> Result<(), String> {
+    match app.get_webview(&tile_label(&id)) {
+        Some(v) => v.reload().map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+#[tauri::command]
+pub async fn web_child_close(app: AppHandle, id: String) -> Result<(), String> {
+    match app.get_webview(&tile_label(&id)) {
+        Some(v) => v.close().map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,6 +246,11 @@ mod tests {
 
     #[test]
     fn connect_timeout_is_short() { assert_eq!(CONNECT_MS, 300); }
+
+    #[test]
+    fn tile_label_is_safe() {
+        assert_eq!(tile_label("n1:t2/../x"), "tile-n1_t2____x");
+    }
 
     #[test]
     fn rejects_non_http() {

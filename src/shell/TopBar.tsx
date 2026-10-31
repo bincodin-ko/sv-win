@@ -31,13 +31,13 @@ export default function TopBar() {
   if (home) return null;
   return (
     <div data-testid="topbar" style={{ position: "fixed", top: 0, left: 0, right: 0, height: BAR_H, zIndex: 9500, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 8px", pointerEvents: "none" }}>
-      <div style={{ ...pill, flex: "0 1 auto", minWidth: 0 }}>
+      <div data-chrome style={{ ...pill, flex: "0 1 auto", minWidth: 0 }}>
         <button data-testid="back-home" onClick={() => void runAppKey("home")} style={chipStyle}>{t("← Back to home")}</button>
         <RepoChip />
         <div style={{ minWidth: 0, overflowX: "auto" }}><Tabs /></div>
         <button data-testid="close-repo" disabled={!active} onClick={() => active && void closeRepoFlow(active, "button")} style={chipStyle}>{t("Close repo")}</button>
       </div>
-      <div style={pill}>
+      <div data-chrome style={pill}>
         <LiveChip />
         <span data-testid="needs-you-slot"><NeedsYouChip /></span> {/* S-339: 조건(S-689)은 칩이 안다 */}
         <UsagePill />

@@ -18,7 +18,7 @@ export default function LeftRail({ flyout, onSpawnClick, onFit }: { flyout: Reac
   const [flyId, setFlyId] = useState<string | null>(null);
   const Fly = tools().find((x) => x.id === flyId)?.flyout;
   return (
-    <div data-testid="rail" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+    <div data-testid="rail" data-chrome onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
       style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", gap: 4, padding: 4, background: "var(--surface)", border: "1px solid var(--bd)", borderRadius: 22, zIndex: 20 }}>
       {tools().map((td) => {
         const label = t(td.label);

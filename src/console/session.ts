@@ -88,6 +88,8 @@ export { stopLive as stopLiveStatus };
 if (typeof window !== "undefined" && !isTauri()) Object.assign(window, { __pause: { pauseAll: () => pauseAll(allSessions()), resumeAll: () => resumeAll(allSessions()) } });
 /** 실행 중인 콘솔 수 (종료 확인창, S-230) */
 export const runningCount = () => [...sessions.values()].filter((s) => s.isRunning()).length;
+/** 실행 중인 콘솔 (sessionKey, 세션) 목록 — 실행 중 칩의 목록(167번) */
+export const runningSessions = () => [...sessions].filter(([, s]) => s.isRunning()).map(([key, s]) => ({ key, s }));
 
 export function createSession(o: { nodeId: string; term: Terminal; agentId: string; cwd?: string; onStatus: (s: Status) => void } & Partial<Scope>): Session {
   const { nodeId, term } = o;

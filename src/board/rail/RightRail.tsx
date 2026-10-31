@@ -38,7 +38,7 @@ export default function RightRail() {
     if (nodes.length) void useSaved.getState().add({ name: nextSetName(saved), nodes });
   };
   return (
-    <div style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", zIndex: 5, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}
+    <div data-chrome style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", zIndex: 5, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}
       onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()}>
       <div ref={ref} style={{ position: "relative", pointerEvents: "auto" }}>
       <button data-testid="rail-presets" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}

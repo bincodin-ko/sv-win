@@ -114,7 +114,7 @@ export default {
   "Sun": "일",
   "Tab closed": "탭 닫힘",
   "Text": "텍스트",
-  "This site doesn't allow being shown inside a tile.": "이 사이트는 타일 안에서 표시할 수 없습니다.",
+  "This site blocks frames, so it opens in a built-in browser view.": "이 사이트는 프레임을 막아 내장 브라우저로 띄웁니다.",
   "Thu": "목",
   "Title": "제목",
   "Today": "오늘",

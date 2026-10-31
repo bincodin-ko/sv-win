@@ -186,3 +186,30 @@ test("S-342 Ctrl+O: 콘솔이 키보드를 가지면 무시, 아니면 폴더 �
   await page.keyboard.press("Control+O");
   await expect(page.getByTestId("repo-chip")).toHaveText(/third/);
 });
+
+test("167번 live chip 누르면 실행 중 CLI 목록 — 끄기(칸 남음)·닫기(칸 지움)·모두 끄기", async ({ page }) => {
+  await page.evaluate(() => {
+    for (let i = 0; i < 3; i++) (window as any).__shell.spawn("ws-fake", "shell");
+  });
+  await expect(page.getByTestId("live-chip")).toHaveText("3 live");
+  const consoles = page.getByTestId("console");
+  const total = await consoles.count();
+  await page.getByTestId("live-chip").click();
+  await expect(page.getByTestId("live-row")).toHaveCount(3);
+  // 끄기: 수가 줄고 콘솔 칸은 그대로
+  await page.getByTestId("live-stop").first().click();
+  await expect(page.getByTestId("live-chip")).toHaveText("2 live");
+  await expect(page.getByTestId("live-row")).toHaveCount(2);
+  expect(await consoles.count()).toBe(total);
+  // 닫기: 확인창 → 확인하면 칸도 지움
+  await page.getByTestId("live-close").first().click();
+  await page.getByTestId("confirm-close").getByRole("button", { name: "Close" }).click();
+  await expect(page.getByTestId("live-chip")).toHaveText("1 live");
+  await expect(consoles).toHaveCount(total - 1);
+  // 모두 끄기: 확인 → 칩이 사라짐, 칸은 남음
+  await page.getByTestId("live-chip").click();
+  await page.getByTestId("live-stop-all").click();
+  await page.getByTestId("confirm-close").getByRole("button", { name: "Close" }).click();
+  await expect(page.getByTestId("live-chip")).toHaveCount(0);
+  await expect(consoles).toHaveCount(total - 1);
+});

@@ -176,7 +176,25 @@ test("S-1110 임베드 불가: 안내와 Open in window · Open in Browser", asy
   await open(page);
   await place(page);
   await go(page, "blocked.example.com");
-  await expect(page.getByTestId("web-blocked")).toContainText("This site doesn't allow being shown inside a tile.");
+  await expect(page.getByTestId("web-blocked")).toContainText("This site blocks frames, so it opens in a built-in browser view.");
+  // 107번: 진짜 웹뷰를 열고 타일 자리에 맞춘다
+  const log = () => page.evaluate(() => (window as any).__fakeWebLog as string[]);
+  await expect.poll(async () => (await log()).some((l) => /^child-open .* https:\/\/blocked\.example\.com/.test(l))).toBe(true);
+  // 만들기가 끝난 뒤 자리를 한 번 더 보낸다(처음 알림은 웹뷰가 생기기 전이라 버려질 수 있다)
+  await expect.poll(async () => { const l = await log(); const i = l.findIndex((x) => x.startsWith("child-open")); return l.slice(i + 1).filter((x) => /^child-place \S+ \d/.test(x)).length; }).toBeGreaterThanOrEqual(2);
+  await expect.poll(async () => (await log()).filter((l) => l.startsWith("child-place")).at(-1)).toMatch(/^child-place \S+ \d+,\d+,\d+,\d+,[\d.]+$/);
+  const box = (await page.getByTestId("web-blocked").boundingBox())!;
+  const [x, y, w, h] = (await log()).filter((l) => l.startsWith("child-place")).at(-1)!.split(" ")[2]!.split(",").map(Number);
+  expect(Math.abs(x! - box.x) + Math.abs(y! - box.y) + Math.abs(w! - box.width) + Math.abs(h! - box.height)).toBeLessThan(6);
+  // 메뉴가 덮으면 숨긴다(진짜 웹뷰는 앱 위에 그려지므로). 타일과 안 겹치는 메뉴는 그대로
+  await page.getByTestId("tools-btn").click();
+  await page.waitForTimeout(200);
+  expect((await log()).at(-1)).not.toMatch(/hide$/);
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => { const d = document.createElement("div"); d.id = "ov"; d.setAttribute("role", "menu"); Object.assign(d.style, { position: "fixed", left: "500px", top: "400px", width: "40px", height: "20px", zIndex: "99" }); document.body.append(d); });
+  await expect.poll(async () => (await log()).at(-1)).toMatch(/hide$/);
+  await page.evaluate(() => document.getElementById("ov")!.remove());
+  await expect.poll(async () => (await log()).at(-1)).toMatch(/^child-place \S+ \d+/);
   await expect(frame(page)).toHaveCount(0);
   await expect(page.getByTestId("web-open-window")).toHaveText("Open in window");
   await expect(page.getByTestId("web-open-browser2")).toHaveText("Open in Browser");

@@ -19,6 +19,11 @@ export function jumpToNext(): boolean {
   const key = pickNext(useLive.getState().needs, last);
   if (!key) return false;
   last = key;
+  return jumpTo(key);
+}
+
+/** sessionKey 의 콘솔로: 그 워크스페이스를 보이고, 콘솔을 선택하고, 화면에 꽉 맞춘다. 없으면 false */
+export function jumpTo(key: string): boolean {
   const [wsId, nodeId] = JSON.parse(key) as [string, string];
   if (wsId) useShell.getState().showWorkspace(wsId);
   const store = wsId ? registry.get(wsId) : DEFAULT_SCOPE.store;

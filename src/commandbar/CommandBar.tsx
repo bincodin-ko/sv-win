@@ -108,7 +108,7 @@ export default function CommandBar({ wsId, repo }: { wsId: string; repo: string 
   };
 
   return (
-    <div style={{ position: "fixed", left: "50%", bottom: 16, transform: "translateX(-50%)", width: "min(640px, calc(100vw - 340px))", zIndex: 900, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+    <div data-chrome style={{ position: "fixed", left: "50%", bottom: 16, transform: "translateX(-50%)", width: "min(640px, calc(100vw - 340px))", zIndex: 900, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
       {open && <ThreadPanel repo={repo} />}
       <div data-testid="command-bar" onPointerDown={(e) => e.stopPropagation()}
         style={{ pointerEvents: "auto", position: "relative", display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", background: "var(--surface)", color: "var(--fg-2)", border: `1px solid ${focused ? "var(--accent)" : "var(--bd)"}`, borderRadius: 22, boxShadow: "0 8px 28px var(--scrim)" }}>

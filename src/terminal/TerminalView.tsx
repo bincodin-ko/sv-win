@@ -44,6 +44,11 @@ export function attachWebgl(term: Terminal): () => void {
     gl.onContextLoss(release); // 문맥을 잃으면 DOM 으로 내려간다
     term.loadAddon(gl);
     glActive++;
+    // 222번: WebGL 은 캔버스 크기를 화면 배율 무시(device-pixel-content-box)로 다시 맞춘다 → 보드 줌 배율(dpr/창 dpr)을 곱해 덮어쓴다
+    const core = (term as unknown as { _core?: { _coreBrowserService?: { dpr: number }; _renderService?: { _renderer?: { value?: unknown } } } })._core;
+    const r = core?._renderService?._renderer?.value as { _setCanvasDevicePixelDimensions?: (w: number, h: number) => void } | undefined;
+    const set = r?._setCanvasDevicePixelDimensions?.bind(r);
+    if (r && set) r._setCanvasDevicePixelDimensions = (w, h) => { const k = (core?._coreBrowserService?.dpr ?? 1) / window.devicePixelRatio; set(Math.round(w * k), Math.round(h * k)); };
   } catch {
     try {
       gl?.dispose();
@@ -78,6 +83,7 @@ export function createTerminal(el: HTMLElement): TermHandle {
   term.open(el);
   for (const ident of [0, 1, 2, 8, 52]) term.parser.registerOscHandler(ident, () => true); // 제목 0·1·2, 하이퍼링크 8, 클립보드 52: 처리한 것으로 치고 버림
   fixScaledMouse(term);
+  const unsharp = sharpOnZoom(term, el);
   const unhook = hookInput(term);
   let font = term.options.fontSize!; // 멈춤이 아닐 때의 글꼴
   let frozen: { w: number; h: number; f: number } | null = null; // 멈춘 순간의 화면 크기와 글꼴
@@ -163,6 +169,7 @@ export function createTerminal(el: HTMLElement): TermHandle {
       waiting.delete(retry);
       gate.dispose();
       unhook();
+      unsharp();
       term.dispose();
     },
   };
@@ -252,6 +259,26 @@ export function fixScaledMouse(term: Terminal): void {
   const report = ms.getMouseReportCoords.bind(ms);
   ms.getCoords = (e: { clientX: number; clientY: number }, el: HTMLElement, ...rest: any[]) => getCoords(unscale(e, el), el, ...rest);
   ms.getMouseReportCoords = (e: { clientX: number; clientY: number }, el: HTMLElement) => report(unscale(e, el), el);
+}
+
+/** 보드 줌(CSS scale)에서 캔버스를 화면 크기대로 그린다. dpr 에 줌 배율을 곱해 xterm 에 알린다.
+ * 안 하면 100% 로 그린 그림을 90% 로 줄여 글자가 흐리다(사용자 지적 222번). 배율은 0.3초마다 잰다(줌은 ResizeObserver 에 안 잡힌다).
+ * xterm 내부(_core._coreBrowserService)에 기대므로 버전 올릴 때 e2e 로 확인. */
+// ponytail: 0.3초 폴링. 보드 줌 변경 알림을 받게 되면 구독으로 바꾼다
+export function sharpOnZoom(term: Terminal, el: HTMLElement): () => void {
+  const cbs = (term as unknown as { _core?: { _coreBrowserService?: { _onDprChange?: { fire: (n: number) => void } } } })._core?._coreBrowserService;
+  if (!cbs?._onDprChange) return () => {};
+  let k = 1;
+  Object.defineProperty(cbs, "dpr", { configurable: true, get: () => window.devicePixelRatio * k });
+  const check = () => {
+    const w = el.getBoundingClientRect().width;
+    if (!el.offsetWidth || !w) return;
+    const z = Math.round((w / el.offsetWidth) * 100) / 100;
+    if (z !== k) { k = z; cbs._onDprChange!.fire(window.devicePixelRatio * k); }
+  };
+  check();
+  const iv = setInterval(check, 300);
+  return () => clearInterval(iv);
 }
 
 /** 흐린 글씨 한 줄(S-070 안내·S-071 종료 코드·S-165·S-072). 커서가 줄 중간이면 줄을 바꾼 뒤 쓴다. */

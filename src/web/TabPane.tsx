@@ -2,7 +2,8 @@
 // 활성이 아닌 탭도 DOM 에 남겨 숨긴다(S-1107).
 import { useEffect, useRef, useState } from "react";
 import { useScope } from "../board/BoardScope";
-import { openUrl, webProbe, webWindowOpen } from "../lib/ipc";
+import { openUrl, webChildReload, webProbe, webWindowOpen } from "../lib/ipc";
+import { useNativeWeb } from "./nativeWeb";
 import Dial from "./Dial";
 import { fitDevice } from "./devices";
 import { isLocalUrl, nextDelay, onProbe, type Wait } from "./waitState";
@@ -29,6 +30,9 @@ export default function TabPane({ nodeId, tab, active, avail, device, zoom, cmd,
   const [stopped, setStopped] = useState(false);
   const [loading, setLoading] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const nativeRef = useRef<HTMLDivElement>(null);
+  const childId = `${nodeId}-${tab.id}`;
+  useNativeWeb(nativeRef, childId, url, !!url && phase === "blocked" && !stopped, active && visible); // 107번 iframe 을 막는 사이트는 진짜 웹뷰로
 
   // 연결 확인 + 서버 대기. 주소·Retry 가 바뀔 때마다 처음부터
   useEffect(() => {
@@ -62,6 +66,7 @@ export default function TabPane({ nodeId, tab, active, avail, device, zoom, cmd,
     if (!cmd || cmd.n === last.current) return;
     last.current = cmd.n;
     if (cmd.kind === "stop") { setStopped(true); setLoading(false); return; }
+    if (st.current.phase === "blocked") return void webChildReload(childId).catch(() => {});
     if (st.current.phase !== "ready") return setRetry((r) => r + 1);
     setStopped(false);
     setLoading(true);
@@ -109,8 +114,8 @@ export default function TabPane({ nodeId, tab, active, avail, device, zoom, cmd,
         </div>
       )}
       {url && phase === "blocked" && (
-        <div data-testid="web-blocked" style={center}>
-          <div>{t("This site doesn't allow being shown inside a tile.")}</div>
+        <div ref={nativeRef} data-testid="web-blocked" style={center}>
+          <div>{t("This site blocks frames, so it opens in a built-in browser view.")}</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button data-testid="web-open-window" style={btn} onClick={() => void webWindowOpen(nodeId, url).catch(() => {})}>{t("Open in window")}</button>
             <button data-testid="web-open-browser2" style={btn} onClick={() => void openUrl(url).catch(() => {})}>{t("Open in Browser")}</button>

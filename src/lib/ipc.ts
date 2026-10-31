@@ -590,6 +590,23 @@ export async function webWindowClose(id: string): Promise<void> {
   if (isTauri()) return invoke("web_window_close", { id });
   webLog(`close ${id}`);
 }
+/** 107번 iframe 을 막는 사이트용 진짜 웹뷰 tile-<id>(타일 위에 겹침). 가짜: __fakeWebLog 에 기록 */
+export async function webChildOpen(id: string, url: string): Promise<void> {
+  if (isTauri()) return invoke("web_child_open", { id, url });
+  webLog(`child-open ${id} ${url}`);
+}
+export async function webChildPlace(id: string, r: { x: number; y: number; w: number; h: number; zoom: number; show: boolean }): Promise<void> {
+  if (isTauri()) return invoke("web_child_place", { id, ...r });
+  webLog(`child-place ${id} ${r.show ? `${r.x},${r.y},${r.w},${r.h},${r.zoom}` : "hide"}`);
+}
+export async function webChildReload(id: string): Promise<void> {
+  if (isTauri()) return invoke("web_child_reload", { id });
+  webLog(`child-reload ${id}`);
+}
+export async function webChildClose(id: string): Promise<void> {
+  if (isTauri()) return invoke("web_child_close", { id });
+  webLog(`child-close ${id}`);
+}
 
 // ---- 4묶음 D5 Loops 정의(S-1401). repo 경로별. 가짜: window.__fakeLoops[repo] ----
 import type { Loop } from "../loops/types";
