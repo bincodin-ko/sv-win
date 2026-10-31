@@ -131,14 +131,35 @@ test("CDP 대기열 3번 — 스크롤해도 조합 글자가 왼쪽 위에 안 
     const v = document.querySelector(".composition-view") as HTMLElement, s = (document.querySelector(".xterm-screen") as HTMLElement).getBoundingClientRect();
     const a = v.getBoundingClientRect(), cs = getComputedStyle(v);
     return { on: v.classList.contains("active"), row: Math.round((a.top - s.top) / (s.height / t.rows)), col: Math.round((a.left - s.left) / (s.width / t.cols)), rows: t.rows,
-      bg: cs.backgroundColor, theme: (() => { const d = document.createElement("i"); d.style.color = t.options.theme.background; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; })(), deco: cs.textDecorationLine, cursor: t.options.cursorStyle, inactive: t.options.cursorInactiveStyle, blink: t.options.cursorBlink };
+      bg: cs.backgroundColor, deco0: getComputedStyle(v.firstElementChild!).textDecorationLine, theme: (() => { const d = document.createElement("i"); d.style.color = t.options.theme.background; document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; })(), deco: cs.textDecorationLine, cursor: t.options.cursorStyle, inactive: t.options.cursorInactiveStyle, blink: t.options.cursorBlink };
   });
   console.log("SPOT3", JSON.stringify(r));
   expect(r.on).toBe(true);
   expect(r.row).toBe(r.rows - 1); // 왼쪽 위(0)가 아니라 커서 줄을 화면 안으로 당긴 자리
   expect(r.col).toBe(4);
   expect(r.bg).toBe(r.theme); // 상자가 아니라 터미널 바탕색 위의 글자
-  expect(r.deco).toBe("underline");
+  expect(r.deco0).toBe("underline"); // 조합 글자에만 밑줄
   expect([r.cursor, r.inactive, r.blink]).toEqual(["bar", "bar", true]);
+  await comp(""); await sleep(100);
+});
+
+// 사용자 지적: 조합 중 막대가 글자 앞에 보였고(안ㅣ녕), 글 중간에서 조합하면 오른쪽 글이 가려졌다
+test("CDP 조합 중 — 막대는 조합 글자 오른쪽, 오른쪽 글은 뒤로 밀려 보인다", async ({ page }) => {
+  await page.evaluate(() => { const f = (window as any).__fakePty; f.emit(f.ids()[0], "[2J[H❯ 가나다라[1;5H"); }); // 커서: '가' 뒤
+  await sleep(300);
+  await raw("KeyD"); await comp("ㅇ"); await up("d", "KeyD", 68); await sleep(250);
+  const r = await page.evaluate(() => {
+    const v = document.querySelector(".composition-view") as HTMLElement;
+    const kids = [...v.children] as HTMLElement[];
+    const caret = v.querySelector(".sv-ime-caret") as HTMLElement;
+    const compSpan = kids[0]!, s = (document.querySelector(".xterm-screen") as HTMLElement).getBoundingClientRect();
+    const t = [...(window as any).__terms.values()][0], cw = s.width / t.cols;
+    return { text: v.textContent, compRight: compSpan.getBoundingClientRect().right, caretX: caret.getBoundingClientRect().left, compLeftCol: Math.round((compSpan.getBoundingClientRect().left - s.left) / cw), restLeftCol: Math.round((kids[2]!.getBoundingClientRect().left - s.left) / cw) };
+  });
+  console.log("MID", JSON.stringify(r));
+  expect(r.text).toBe("ㅇ나다라"); // 오른쪽 글이 사라지지 않음
+  expect(r.caretX).toBeGreaterThanOrEqual(r.compRight - 1); // 막대가 조합 글자 오른쪽
+  expect(r.compLeftCol).toBe(4); // 조합 글자는 '가' 뒤
+  expect(r.restLeftCol).toBe(6); // '나'는 조합 글자(2칸) 뒤로 밀림
   await comp(""); await sleep(100);
 });

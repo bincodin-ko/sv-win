@@ -57,8 +57,15 @@ export function hookIme(ta: HTMLTextAreaElement, send: (d: string) => void, mute
     ev.preventDefault(); // 뒤따르는 keypress 가 없게
     ev.stopImmediatePropagation();
   };
+  // 확정 직후(타이머 전) keypress: keydown 이 이미 모았으면 keypress 가 안 온다 → 여기 온 글자는 아직 아무도 안 모은 것. 막기만 하면 사라진다(조합 화면이 무거워져 타이머가 늦을 때 '.'·'?' 가 빠졌다) → 큐에 넣는다
   const keypress = (e: Event) => {
-    pressed = true; if (timer !== undefined) { e.preventDefault(); e.stopImmediatePropagation(); } };
+    pressed = true;
+    if (timer === undefined) return;
+    const ev = e as KeyboardEvent;
+    if (keyed !== ev.key && ev.key.length === 1 && !ev.ctrlKey && !ev.altKey && !ev.metaKey) { extra += ev.key; keyed = ev.key; } // keydown 이 이미 모은 같은 키면 건너뜀
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
   top.addEventListener("keypress", keypress, true);
   top.addEventListener("keydown", keydown, true);
   top.addEventListener("input", input, true);

@@ -36,7 +36,7 @@ describe("Claude 입력 줄 글 끝 찾기", () => {
 });
 
 // 대기열 3번: 조합 상자가 콘솔 왼쪽 위에 뜨던 것 — 커서가 화면 밖이어도 자리를 잡는다
-import { imeSpot } from "./imeSpot";
+import { imeSpot, restCells } from "./imeSpot";
 describe("조합 글자 자리(imeSpot)", () => {
   const lines = async (n: number, tail = "") => {
     const term = new Terminal({ cols: 40, rows: 10, scrollback: 100, allowProposedApi: true });
@@ -45,16 +45,25 @@ describe("조합 글자 자리(imeSpot)", () => {
   };
   it("커서가 보이고 화면 안이면 커서 자리", async () => {
     const t = await lines(3, "\r\n$ ab");
-    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, null)).toEqual({ x: 4, y: 3 });
+    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, null)).toEqual({ x: 4, y: 3, exact: true });
   });
   it("위로 스크롤해 커서가 화면 밖이면 왼쪽 위(0,0)가 아니라 마지막 자리", async () => {
     const t = await lines(40, "\r\n$ ab");
     t.scrollLines(-20);
-    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, { x: 4, y: 9 })).toEqual({ x: 4, y: 9 });
+    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, { x: 4, y: 9 })).toEqual({ x: 4, y: 9, exact: false });
   });
   it("마지막 자리도 없으면 커서를 화면 안으로 당긴 자리(맨 아래 줄)", async () => {
     const t = await lines(40, "\r\n$ ab");
     t.scrollLines(-20);
-    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, null)).toEqual({ x: 4, y: 9 });
+    expect(imeSpot(t.buffer.active, t.rows, t.cols, false, null)).toEqual({ x: 4, y: 9, exact: false });
+  });
+});
+
+// 사용자 지적: 글 중간에서 조합하면 오른쪽 글이 가려졌다 → 오른쪽 글(넓은 글자 2칸)을 그대로 읽어 뒤로 밀어 보인다
+describe("커서 뒤 글(restCells)", () => {
+  it("커서 칸부터 끝까지, 한글은 2칸, 뒤 빈칸 뺌", async () => {
+    const term = new Terminal({ cols: 40, rows: 5, allowProposedApi: true });
+    await new Promise<void>((r) => term.write("❯ 가나 다라 x   ", r));
+    expect(restCells(term.buffer.active, 4, 0).map((c) => c.ch + c.w).join("")).toBe("나2 1다2라2 1x1");
   });
 });
