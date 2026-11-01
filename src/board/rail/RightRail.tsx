@@ -12,6 +12,8 @@ import { useUi } from "../../ui/useUi";
 import { kindsWith, placeNew } from "../kinds/registry";
 import { hasStudio, requestOpenStudio } from "../../studio/useStudio";
 import { tm, useT } from "../../i18n";
+import { useSettings } from "../../settings/useSettings";
+import { tabStyle } from "./LeftRail";
 
 const itemStyle: React.CSSProperties = { pointerEvents: "auto", textAlign: "left", padding: "6px 10px", border: 0, borderRadius: 6, background: "transparent", color: "var(--text)", font: "13px system-ui", cursor: "pointer" };
 
@@ -32,7 +34,11 @@ export default function RightRail() {
     document.addEventListener("keydown", esc);
     return () => (document.removeEventListener("mousedown", away), document.removeEventListener("keydown", esc));
   }, [open]);
+  const hidden = useSettings((s) => s.s.rightRailHidden === true); // 대기열 2번: 접어 둘 수 있게(설정에 기억)
   if (!visible) return null;
+  if (hidden)
+    return <button data-testid="rail-right-show" data-chrome aria-label={t("Show buttons")} title={t("Show buttons")} onClick={() => useSettings.getState().patch({ rightRailHidden: false })} onPointerDown={(e) => e.stopPropagation()}
+      style={{ ...tabStyle, right: 0, borderRadius: "10px 0 0 10px", borderRight: 0 }}>‹</button>;
   const save = () => {
     const nodes = captureLayout(Object.values(store.getState().nodes));
     if (nodes.length) void useSaved.getState().add({ name: nextSetName(saved), nodes });
@@ -40,6 +46,8 @@ export default function RightRail() {
   return (
     <div data-chrome style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", zIndex: 5, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}
       onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()}>
+      <button data-testid="rail-right-hide" aria-label={t("Hide buttons")} title={t("Hide buttons")} onClick={() => (setOpen(false), useSettings.getState().patch({ rightRailHidden: true }))}
+        style={{ pointerEvents: "auto", width: 24, height: 20, padding: 0, border: "1px solid var(--bd)", borderRadius: 6, background: "var(--surface)", color: "var(--mute)", font: "12px system-ui", cursor: "pointer" }}>›</button>
       <div ref={ref} style={{ position: "relative", pointerEvents: "auto" }}>
       <button data-testid="rail-presets" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}
         style={railBtn}>{t("Presets")}</button>

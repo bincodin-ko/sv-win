@@ -66,6 +66,10 @@ export default {
   "None": "없음",
   // 우측 레일
   "Presets": "프리셋",
+  "Show tools": "도구 막대 보이기",
+  "Hide tools": "도구 막대 숨기기",
+  "Show buttons": "오른쪽 단추 보이기",
+  "Hide buttons": "오른쪽 단추 숨기기",
   "Open the full library": "전체 라이브러리 열기",
   "Save current layout": "현재 배치 저장",
   "Insert {label}": "{label} 삽입",
