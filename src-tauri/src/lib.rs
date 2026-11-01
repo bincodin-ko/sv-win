@@ -279,6 +279,7 @@ pub fn run() {
             git::cmds::git_log,
             git::cmds::git_status,
             transcripts::last_reply_cmd,
+            transcripts::chat_lines_cmd,
             agent_logs::agent_find_session,
             secrets::planner_key_set,
             secrets::planner_key_has,

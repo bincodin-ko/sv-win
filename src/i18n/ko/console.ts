@@ -21,6 +21,11 @@ export default {
   "Resume last conversation?": "지난 대화를 이어서 할까요?",
   "Resume": "이어서 하기",
   "Start new": "새로 시작",
+  "Chat view": "채팅으로 보기",
+  "No conversation yet": "아직 대화가 없어요",
+  "{n} tools used": "실행된 도구 {n}개",
+  "Message the CLI (Enter to send)": "CLI 에 보낼 말 (Enter 로 보내기)",
+  "Answer the question above first": "먼저 위 질문에 답해 주세요",
   "Dismiss": "닫기",
   // 저장 실패 알림·라이브 상태 안내 (U4)
   "Couldn't save the board. It will keep trying.": "보드를 저장하지 못했어요. 계속 다시 시도할게요.",

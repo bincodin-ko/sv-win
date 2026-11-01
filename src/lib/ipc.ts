@@ -309,6 +309,12 @@ function fakeReplyFor(sessionId: string): string | null {
 export async function lastReply(agent: string, repo: string, sessionId: string, configDir?: string): Promise<string | null> {
   return isTauri() ? invoke<string | null>("last_reply_cmd", { agent, repo, sessionId, configDir: configDir ?? null }) : fakeReplyFor(sessionId);
 }
+/** 대기열 1번 채팅 보기: 대화 기록의 from(바이트) 뒤 새 줄들. 가짜: window.__fakeChat[sessionId] 줄 배열(from = 줄 번호) */
+export async function chatLines(agent: string, repo: string, sessionId: string, configDir: string | undefined, from: number): Promise<{ lines: string[]; next: number } | null> {
+  if (isTauri()) return invoke("chat_lines_cmd", { agent, repo, sessionId, configDir: configDir ?? null, from });
+  const all = (window as unknown as { __fakeChat?: Record<string, string[]> }).__fakeChat?.[sessionId];
+  return all ? { lines: all.slice(from), next: all.length } : null;
+}
 /** `<repo>/outputs/<name>-<stamp>.md` 로 저장하고 경로를 돌려준다 */
 export async function outputsSave(repo: string, name: string, stamp: string, content: string): Promise<string> {
   if (isTauri()) return invoke<string>("outputs_save_cmd", { repo, name, stamp, content });

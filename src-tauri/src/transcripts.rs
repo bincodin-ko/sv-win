@@ -141,6 +141,40 @@ pub async fn last_reply_cmd(agent: String, repo: String, session_id: String, con
     last_reply_dirs(&agent, &repo, &session_id, &claude, &codex)
 }
 
+/// 채팅 보기(대기열 1번): 대화 기록 파일의 from 바이트부터 끝까지 완성된 줄만. 파일이 줄었으면 처음부터. 없으면 None
+pub fn chat_lines(file: &Path, from: u64) -> Option<(Vec<String>, u64)> {
+    let mut f = fs::File::open(file).ok()?;
+    let len = f.metadata().ok()?.len();
+    let from = if from > len { 0 } else { from };
+    f.seek(SeekFrom::Start(from)).ok()?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).ok()?;
+    let end = buf.iter().rposition(|&b| b == b'\n').map_or(0, |i| i + 1); // 쓰는 중인 마지막 줄은 다음에
+    let text = String::from_utf8_lossy(&buf[..end]);
+    Some((text.lines().filter(|l| !l.trim().is_empty()).map(str::to_string).collect(), from + end as u64))
+}
+
+#[derive(serde::Serialize)]
+pub struct ChatChunk {
+    lines: Vec<String>,
+    next: u64,
+}
+
+#[tauri::command]
+pub async fn chat_lines_cmd(agent: String, repo: String, session_id: String, config_dir: Option<String>, from: u64) -> Option<ChatChunk> {
+    if !safe_id(&session_id) {
+        return None;
+    }
+    let h = home()?;
+    let dir = config_dir.map(PathBuf::from);
+    let file = match agent.as_str() {
+        "claude" => dir.unwrap_or_else(|| h.join(".claude")).join("projects").join(project_dir_name(&repo)).join(format!("{session_id}.jsonl")),
+        "codex" => codex_file(&session_id, &dir.or_else(|| std::env::var_os("CODEX_HOME").map(PathBuf::from)).unwrap_or_else(|| h.join(".codex")))?,
+        _ => return None,
+    };
+    tauri::async_runtime::spawn_blocking(move || chat_lines(&file, from)).await.ok()?.map(|(lines, next)| ChatChunk { lines, next })
+}
+
 #[tauri::command]
 pub async fn outputs_save_cmd(repo: String, name: String, stamp: String, content: String) -> Result<String, String> {
     outputs_save(&repo, &name, &stamp, &content).map(|p| p.to_string_lossy().into_owned())
@@ -148,6 +182,22 @@ pub async fn outputs_save_cmd(repo: String, name: String, stamp: String, content
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn chat_lines_reads_only_new_complete_lines() {
+        let d = std::env::temp_dir().join(format!("sv-chat-{}", std::process::id()));
+        fs::create_dir_all(&d).unwrap();
+        let p = d.join("s.jsonl");
+        fs::write(&p, "{\"a\":1}\n{\"b\":2}\n{\"c\"").unwrap();
+        let (l, n) = chat_lines(&p, 0).unwrap();
+        assert_eq!(l, vec!["{\"a\":1}", "{\"b\":2}"]);
+        fs::OpenOptions::new().append(true).open(&p).unwrap().write_all(b":3}\n").unwrap();
+        let (l2, n2) = chat_lines(&p, n).unwrap();
+        assert_eq!(l2, vec!["{\"c\":3}"]);
+        assert_eq!(chat_lines(&p, n2).unwrap().0.len(), 0);
+        assert_eq!(chat_lines(&p, 9999).unwrap().0.len(), 3); // 줄었으면 처음부터
+        let _ = fs::remove_dir_all(&d);
+    }
+
     use super::*;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};

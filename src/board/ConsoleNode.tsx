@@ -1,4 +1,5 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import ChatPanel from "../chat/ChatPanel";
 import AgentPicker from "../console/AgentPicker";
 import { consoleCwd, getRepoPath, sameFolder } from "../console/offers";
 import ResumeBanner from "../console/ResumeBanner";
@@ -59,6 +60,8 @@ function ConsoleNode({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>("STARTING");
   const [picker, setPicker] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [chat, setChat] = useState(false); // 대기열 1번: 채팅 보기 패널(콘솔 오른쪽)
+  const getSession = useCallback(() => session.current ?? undefined, []);
   const maxed = useMax((s) => s.key === sessionKey(wsId, id)); // 1-4: 크게 보기(Board 가 노드 래퍼 스타일을 바꾼다 — 이 컴포넌트는 그대로)
   const detail = useLive((s) => s.detail[sessionKey(wsId, id)]); // B16 S-687: hook 이 알려 준 하는 일
   const reply = useOutputs((s) => s.replies[sessionKey(wsId, id)]); // B15 S-660
@@ -205,6 +208,10 @@ function ConsoleNode({ id }: { id: string }) {
           style={maxed ? { border: 0, borderRadius: 6, padding: "3px 10px", background: "var(--accent)", color: "var(--accent-text)", font: "600 11px system-ui", cursor: "pointer", whiteSpace: "nowrap" } : iconBtn}>
           {maxed ? `↙ ${t("Restore")}` : "⤢"}
         </button>
+        {(node.agentId === "claude" || node.agentId === "codex") && (
+          <button data-testid="console-chat" title={t("Chat view")} aria-label={t("Chat view")} aria-pressed={chat} onClick={() => setChat((c) => !c)}
+            style={{ ...iconBtn, ...(chat ? { color: "var(--accent)" } : {}) }}>💬</button>
+        )}
         <button data-testid="console-restart" title={t("Restart")} aria-label={t("Restart")} style={iconBtn} onClick={() => void requestRestart(id, undefined, sc)}>↻</button>
         <button data-testid="console-duplicate" title={t("Duplicate")} aria-label={t("Duplicate")} style={iconBtn} onClick={duplicate}>⧉</button>
         <button data-testid="console-close" title={t("Close")} aria-label={t("Close")} style={iconBtn} onClick={() => void requestClose([id], sc)}>✕</button>
@@ -212,6 +219,11 @@ function ConsoleNode({ id }: { id: string }) {
       <ResumeBanner id={id} />
       <div ref={body} data-wheel-own style={{ flex: 1, minHeight: 0, overflow: "hidden", borderRadius: "0 0 10px 10px" }}
         onDoubleClick={() => term.current?.term.focus()} />
+      {chat && (
+        <div style={maxed ? { position: "absolute", right: 8, top: 40, bottom: 8, width: 420, zIndex: 5 } : { position: "absolute", left: "calc(100% + 8px)", top: 0, width: 420, height: "100%" }}>
+          <ChatPanel getSession={getSession} onClose={() => setChat(false)} />
+        </div>
+      )}
       {!maxed && HANDLES.map((h) => <div key={h} data-handle={h} style={handleStyle(h)} onPointerDown={startResize(h)} />)}
     </div>
   );
