@@ -154,6 +154,13 @@ pub fn chat_lines(file: &Path, from: u64) -> Option<(Vec<String>, u64)> {
     Some((text.lines().filter(|l| !l.trim().is_empty()).map(str::to_string).collect(), from + end as u64))
 }
 
+/// Claude 2.x 가 쓰는 `<설정>/sessions/<pid>.json` 에서 그 프로세스가 지금 쓰는 대화 id·폴더.
+/// 실측: `--session-id a591…` 로 띄운 콘솔이 /resume 등으로 eaa31… 대화를 쓰고 있었다(채팅 보기가 빈 채로 보인 원인)
+pub fn live_session_in(dir: &Path, pid: u32) -> Option<(String, String)> {
+    let v: Value = serde_json::from_str(&fs::read_to_string(dir.join("sessions").join(format!("{pid}.json"))).ok()?).ok()?;
+    Some((v.get("sessionId")?.as_str()?.to_string(), v.get("cwd")?.as_str()?.to_string()))
+}
+
 #[derive(serde::Serialize)]
 pub struct ChatChunk {
     lines: Vec<String>,
@@ -182,6 +189,16 @@ pub async fn outputs_save_cmd(repo: String, name: String, stamp: String, content
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn live_session_reads_pid_file() {
+        let d = std::env::temp_dir().join(format!("sv-live-{}", std::process::id()));
+        fs::create_dir_all(d.join("sessions")).unwrap();
+        fs::write(d.join("sessions").join("4242.json"), r#"{"pid":4242,"sessionId":"eaa31a68-1d50","cwd":"D:/x/코드"}"#).unwrap();
+        assert_eq!(live_session_in(&d, 4242), Some(("eaa31a68-1d50".into(), "D:/x/코드".into())));
+        assert_eq!(live_session_in(&d, 1), None);
+        let _ = fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn chat_lines_reads_only_new_complete_lines() {
         let d = std::env::temp_dir().join(format!("sv-chat-{}", std::process::id()));

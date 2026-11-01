@@ -69,3 +69,29 @@ test("대기열 1번 — 번호 없는 질문(폴더 신뢰)은 화살표로 골
   await page.getByTestId("chat-prompt-option").nth(1).click();
   await expect.poll(() => page.evaluate((i) => ((window as any).__fakePty.writes(i) as string[]).at(-1), sp.id)).toBe("\x1b[B\r");
 });
+
+// 설치본 실측: --session-id 로 띄운 콘솔이 /resume 등으로 다른 대화를 쓰면 패널이 비었다 → 프로세스 기록(sessions/<pid>.json)의 대화를 따른다
+test("대기열 1번 — 콘솔이 다른 대화로 바뀌어도(프로세스 기록) 그 대화를 보인다", async ({ page }) => {
+  const sp = await open(page, "claude");
+  await page.evaluate(([id]) => {
+    (window as any).__fakeLive = { [id as number]: ["live-sess", "C:/fake/repo"] };
+    (window as any).__fakeChat = { "live-sess": [JSON.stringify({ type: "user", message: { content: "바뀐 대화의 말" } })] };
+  }, [sp.id] as const);
+  await page.getByTestId("console-chat").click();
+  await expect(page.getByTestId("chat-user")).toHaveText("바뀐 대화의 말");
+});
+
+test("대기열 1번 — / 자동완성(내장 명령·스킬)과 / 명령은 붙여넣기 없이 그대로 보냄", async ({ page }) => {
+  await page.addInitScript(() => ((window as any).__fakeSkills = { skills: [{ scope: "personal", kind: "skill", plugin: null, folderName: "my-skill", path: "C:/fake/personal/my-skill/SKILL.md", dir: "C:/fake/personal/my-skill", raw: "", mtime: 1, sideFiles: [] }] }));
+  const sp = await open(page, "claude");
+  await page.getByTestId("console-chat").click();
+  await page.getByTestId("chat-input").fill("/my");
+  await expect(page.getByTestId("chat-slash").getByRole("option")).toHaveText(["/my-skill"]);
+  await page.getByTestId("chat-input").fill("/cl");
+  await expect(page.getByTestId("chat-slash").getByRole("option").first()).toHaveText("/clear");
+  await page.getByTestId("chat-input").press("Enter"); // 고르기
+  await expect(page.getByTestId("chat-input")).toHaveValue("/clear ");
+  await page.getByTestId("chat-input").press("Enter"); // 보내기
+  await expect.poll(() => page.evaluate((i) => ((window as any).__fakePty.writes(i) as string[]).join(""), sp.id)).toContain("/clear\r");
+  expect(await page.evaluate((i) => ((window as any).__fakePty.writes(i) as string[]).join(""), sp.id)).not.toContain("\x1b[200~/clear");
+});

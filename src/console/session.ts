@@ -65,7 +65,7 @@ export interface Session {
   /** 끝낸다(S-105 절차는 Rust). 이후 콜백은 무시 */
   kill(): void;
   /** 대기열 1번 채팅 보기: 대화 기록 위치(Claude·Codex 이고 대화 id 가 있을 때만) */
-  chatRef(): { agent: string; repo: string; sessionId: string; configDir?: string } | null;
+  chatRef(): { agent: string; repo: string; sessionId: string; configDir?: string; ptyId: number | null } | null;
   dispose(): void;
 }
 
@@ -436,7 +436,9 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
     },
     chatRef: () => {
       const sid = chatId(), repo = consoleCwd(wsId, useBoard.getState().nodes[nodeId]);
-      return sid && repo && (agentId === "claude" || agentId === "codex") ? { agent: agentId, repo, sessionId: sid, configDir: profDir } : null;
+      // Claude 는 id 가 없어도 프로세스 기록(sessions/<pid>.json)으로 찾을 수 있다
+      const ok = repo && (agentId === "codex" ? !!sid : agentId === "claude" && (!!sid || ptyId !== null));
+      return ok ? { agent: agentId, repo: repo!, sessionId: sid ?? "", configDir: profDir, ptyId } : null;
     },
     kill: () => {
       killPty();

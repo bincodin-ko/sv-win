@@ -75,3 +75,15 @@ export function promptOptions(lines: string[]): { label: string; keys: string }[
     return { label: l.replace(/^\s*[❯›]?\s*/, "").trim(), keys: (d < 0 ? "\x1b[A".repeat(-d) : "\x1b[B".repeat(d)) + "\r" };
   });
 }
+
+// 채팅 입력창 / 자동완성: CLI 내장 명령(추측 목록 — CLI 판이 바뀌면 여기만 고침) + 스킬·사용자 명령
+export const BUILTIN: Record<string, string[]> = {
+  claude: ["/clear", "/compact", "/resume", "/model", "/context", "/cost", "/usage", "/memory", "/init", "/review", "/agents", "/mcp", "/permissions", "/hooks", "/plugin", "/config", "/status", "/export", "/rewind", "/help"],
+  codex: ["/new", "/compact", "/model", "/approvals", "/diff", "/status", "/mention", "/init", "/quit"],
+};
+/** "/" 로 시작하고 빈칸 전이면 앞이 같은 명령(최대 8개). 아니면 빈 목록 */
+export function slashSuggest(text: string, names: string[]): string[] {
+  if (!/^\/\S*$/.test(text)) return [];
+  const q = text.toLowerCase();
+  return [...new Set(names)].filter((n) => n.toLowerCase().startsWith(q) && n.toLowerCase() !== q).slice(0, 8);
+}

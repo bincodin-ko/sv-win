@@ -50,3 +50,14 @@ describe("질문 보기(promptOptions)", () => {
   });
   it("보기가 없으면 빈 목록", () => expect(promptOptions(["그냥 글"])).toEqual([]));
 });
+
+import { slashSuggest } from "./parse";
+describe("/ 자동완성", () => {
+  const names = ["/clear", "/compact", "/context", "/my-skill", "/plug:tool"];
+  it("앞이 같은 것", () => expect(slashSuggest("/c", names)).toEqual(["/clear", "/compact", "/context"]));
+  it("빈칸 뒤·/ 아님·다 친 것은 없음", () => {
+    expect(slashSuggest("/clear x", names)).toEqual([]);
+    expect(slashSuggest("hi", names)).toEqual([]);
+    expect(slashSuggest("/clear", names)).toEqual([]);
+  });
+});

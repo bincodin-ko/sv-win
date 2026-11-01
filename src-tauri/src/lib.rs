@@ -84,6 +84,16 @@ async fn pty_resize(state: State<'_, PtyManager>, id: u32, cols: u16, rows: u16)
     state.resize(id, cols, rows)
 }
 
+/// 채팅 보기: 이 PTY 의 claude(자신·자손 프로세스)가 지금 쓰는 대화 id·폴더. 없으면 None
+#[tauri::command]
+async fn claude_live_session(state: State<'_, PtyManager>, id: u32, config_dir: Option<String>) -> Result<Option<(String, String)>, String> {
+    let Some(pid) = state.pid(id) else { return Ok(None) };
+    let Some(dir) = config_dir.map(std::path::PathBuf::from).or_else(|| crate::resume::home().map(|h| h.join(".claude"))) else { return Ok(None) };
+    let mut pids: Vec<u32> = crate::suspend::tree(pid).into_iter().map(|e| e.0).collect();
+    if pids.is_empty() { pids.push(pid); }
+    Ok(pids.into_iter().find_map(|p| crate::transcripts::live_session_in(&dir, p)))
+}
+
 #[tauri::command]
 async fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
     state.kill(id)
@@ -280,6 +290,7 @@ pub fn run() {
             git::cmds::git_status,
             transcripts::last_reply_cmd,
             transcripts::chat_lines_cmd,
+            claude_live_session,
             agent_logs::agent_find_session,
             secrets::planner_key_set,
             secrets::planner_key_has,

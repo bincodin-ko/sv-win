@@ -315,6 +315,11 @@ export async function chatLines(agent: string, repo: string, sessionId: string, 
   const all = (window as unknown as { __fakeChat?: Record<string, string[]> }).__fakeChat?.[sessionId];
   return all ? { lines: all.slice(from), next: all.length } : null;
 }
+/** 채팅 보기: 이 PTY 의 claude 가 지금 쓰는 [대화 id, 폴더](Claude 의 sessions/<pid>.json). 가짜: window.__fakeLive[ptyId] */
+export async function claudeLiveSession(ptyId: number, configDir: string | undefined): Promise<[string, string] | null> {
+  if (isTauri()) return invoke("claude_live_session", { id: ptyId, configDir: configDir ?? null });
+  return (window as unknown as { __fakeLive?: Record<number, [string, string]> }).__fakeLive?.[ptyId] ?? null;
+}
 /** `<repo>/outputs/<name>-<stamp>.md` 로 저장하고 경로를 돌려준다 */
 export async function outputsSave(repo: string, name: string, stamp: string, content: string): Promise<string> {
   if (isTauri()) return invoke<string>("outputs_save_cmd", { repo, name, stamp, content });
