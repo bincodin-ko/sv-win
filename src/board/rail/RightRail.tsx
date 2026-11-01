@@ -46,8 +46,6 @@ export default function RightRail() {
   return (
     <div data-chrome style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", zIndex: 5, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, pointerEvents: "none" }}
       onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()}>
-      <button data-testid="rail-right-hide" aria-label={t("Hide buttons")} title={t("Hide buttons")} onClick={() => (setOpen(false), useSettings.getState().patch({ rightRailHidden: true }))}
-        style={{ pointerEvents: "auto", width: 24, height: 20, padding: 0, border: "1px solid var(--bd)", borderRadius: 6, background: "var(--surface)", color: "var(--mute)", font: "12px system-ui", cursor: "pointer" }}>›</button>
       <div ref={ref} style={{ position: "relative", pointerEvents: "auto" }}>
       <button data-testid="rail-presets" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}
         style={railBtn}>{t("Presets")}</button>
@@ -70,6 +68,9 @@ export default function RightRail() {
           style={railBtn}>{t("Insert {label}", { label: t(k.rail!.label) })}</button>
       ))}
       {!hub && <LoopsButton />}
+      {/* 대기열 3번: 접기 단추는 맨 아래(루프 밑) — 왼쪽 막대와 같은 자리 */}
+      <button data-testid="rail-right-hide" aria-label={t("Hide buttons")} title={t("Hide buttons")} onClick={() => (setOpen(false), useSettings.getState().patch({ rightRailHidden: true }))}
+        style={{ pointerEvents: "auto", width: 24, height: 20, padding: 0, border: "1px solid var(--bd)", borderRadius: 6, background: "var(--surface)", color: "var(--mute)", font: "12px system-ui", cursor: "pointer" }}>›</button>
     </div>
   );
 }

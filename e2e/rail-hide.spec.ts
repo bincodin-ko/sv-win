@@ -24,3 +24,13 @@ test("대기열 2번 — 왼쪽·오른쪽 레일 접기/펴기, 새로고침해
   await page.getByTestId("rail-hide").click();
   await expect(page.getByTestId("rail-show")).toHaveAttribute("data-chrome");
 });
+
+// 대기열 3번: 오른쪽 접기 단추는 줄 맨 아래(루프 밑)
+test("대기열 3번 — 오른쪽 접기 단추가 맨 아래", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/?demo");
+  const hide = (await page.getByTestId("rail-right-hide").boundingBox())!;
+  const ys = await page.evaluate(() => [...document.querySelectorAll('[data-testid^="rail-"]')].filter((e) => e.closest("[data-chrome]") && !e.closest('[data-testid="rail"]') && e.getAttribute("data-testid") !== "rail-right-hide").map((e) => e.getBoundingClientRect().bottom));
+  expect(ys.length).toBeGreaterThan(1);
+  expect(hide.y).toBeGreaterThanOrEqual(Math.max(...ys) - 1);
+});
