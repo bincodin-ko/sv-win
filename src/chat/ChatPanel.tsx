@@ -4,10 +4,11 @@ import { chatLines, claudeLiveSession, skillsScan } from "../lib/ipc";
 import type { Session } from "../console/session";
 import { typeAndSubmit } from "../console/submit";
 import { showsPrompt } from "../commandbar/prompts";
-import { appendMsgs, BUILTIN, lineToMsgs, promptOptions, slashSuggest, type Msg } from "./parse";
+import { appendMsgs, BUILTIN, lineToMsgs, parseSlashMenu, promptOptions, slashSuggest, type Msg } from "./parse";
 import { useT } from "../i18n";
 
 const POLL_MS = 1200;
+const CLEAR_LINE = "\x15"; // Ctrl+U: CLI 입력 줄 비우기(설치본 실측: Claude 2.1.317 에서 됨)
 
 export default function ChatPanel({ getSession, onClose }: { getSession: () => Session | undefined; onClose: () => void }) {
   const t = useT();
@@ -56,12 +57,38 @@ export default function ChatPanel({ getSession, onClose }: { getSession: () => S
     if (agent !== "claude") return;
     void skillsScan(ref?.repo ?? null).then((r) => setNames([...base, ...r.skills.map((k) => `/${k.plugin ? `${k.plugin}:` : ""}${k.folderName}`)])).catch(() => {});
   }, [getSession]);
-  const sugg = slashSuggest(text, names);
+  // CLI 의 / 메뉴를 그대로 쓴다: 친 글을 CLI 입력 줄에도 똑같이 넣고(Ctrl+U 로 비운 뒤), CLI 가 그린 메뉴 줄을 읽는다.
+  // 내장·스킬·플러그인·MCP 명령이 CLI 와 똑같이 뜬다. 메뉴를 못 읽으면(예: Codex) 우리 목록으로
+  const [menu, setMenu] = useState<{ name: string; desc: string }[]>([]);
+  const mirrored = useRef(false);
+  useEffect(() => {
+    const s = getSession();
+    if (!s) return;
+    if (!/^\/\S*$/.test(text)) {
+      if (mirrored.current) { s.write(CLEAR_LINE); mirrored.current = false; }
+      setMenu([]);
+      return;
+    }
+    let read: ReturnType<typeof setTimeout> | undefined;
+    const put = setTimeout(() => {
+      s.write(CLEAR_LINE + text);
+      mirrored.current = true;
+      read = setTimeout(() => setMenu(parseSlashMenu(s.tail(40))), 350);
+    }, 120);
+    return () => { clearTimeout(put); clearTimeout(read); };
+  }, [text, getSession]);
+  const local = slashSuggest(text, names);
+  const sugg: { name: string; desc: string }[] = menu.length ? menu : local.map((name) => ({ name, desc: "" }));
+  const choose = (n: string) => { setText(n + " "); setPick(0); };
 
-  // 맨 아래 근처에 있으면 새 메시지를 따라 내려간다
+  // 처음 대화를 읽으면 맨 아래(최근)부터(468번). 그다음은 맨 아래 근처에 있을 때만 새 메시지를 따라 내려간다
+  const atStart = useRef(true);
   useEffect(() => {
     const el = box.current;
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    if (!msgs.length) { atStart.current = true; return; }
+    if (atStart.current || el.scrollHeight - el.scrollTop - el.clientHeight < 120) el.scrollTop = el.scrollHeight;
+    atStart.current = false;
   }, [msgs, prompt]);
 
   const send = () => {
@@ -69,7 +96,7 @@ export default function ChatPanel({ getSession, onClose }: { getSession: () => S
     if (!s || !v || prompt) return; // 질문이 떠 있을 때 Enter 를 보내면 보기가 골라진다(설치본 실측: 폴더 신뢰에서 'No, exit' 가 골라져 Claude 가 꺼짐)
     setText("");
     // "/" 명령은 붙여넣기(bracketed paste)가 아니라 그대로 쳐야 CLI 가 명령으로 알아본다
-    if (v.startsWith("/")) { s.write(v); setTimeout(() => s.write("\r"), 150); }
+    if (v.startsWith("/")) { mirrored.current = false; setMenu([]); s.write(CLEAR_LINE + v); setTimeout(() => s.write("\r"), 150); }
     else void typeAndSubmit(s, v);
   };
 
@@ -116,9 +143,9 @@ export default function ChatPanel({ getSession, onClose }: { getSession: () => S
       </div>
       {!!sugg.length && (
         <div data-testid="chat-slash" role="listbox" style={{ borderTop: "1px solid var(--bd)", padding: 4, display: "grid", maxHeight: 180, overflowY: "auto", flex: "none" }}>
-          {sugg.map((n, i) => (
-            <button key={n} role="option" aria-selected={i === pick} onMouseDown={(e) => { e.preventDefault(); setText(n + " "); setPick(0); }}
-              style={{ textAlign: "left", padding: "3px 8px", border: 0, borderRadius: 5, background: i === pick ? "var(--surface-2)" : "transparent", color: "var(--fg)", font: "12px ui-monospace, Consolas, monospace", cursor: "pointer" }}>{n}</button>
+          {sugg.map(({ name: n, desc }, i) => (
+            <button key={n} role="option" title={desc} aria-selected={i === pick} onMouseDown={(e) => { e.preventDefault(); choose(n); }}
+              style={{ textAlign: "left", padding: "3px 8px", border: 0, borderRadius: 5, background: i === pick ? "var(--surface-2)" : "transparent", color: "var(--fg)", font: "12px ui-monospace, Consolas, monospace", cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n}{desc && <span style={{ marginLeft: 8, color: "var(--mute)", font: "11px system-ui" }}>{desc}</span>}</button>
           ))}
         </div>
       )}
@@ -128,8 +155,12 @@ export default function ChatPanel({ getSession, onClose }: { getSession: () => S
           onCompositionStart={() => (composing.current = true)} onCompositionEnd={() => (composing.current = false)}
           onKeyDown={(e) => {
             if (sugg.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); setPick((p) => (p + (e.key === "ArrowDown" ? 1 : sugg.length - 1)) % sugg.length); return; }
-            if (sugg.length && e.key === "Tab") { e.preventDefault(); setText(sugg[pick]! + " "); setPick(0); return; }
-            if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) { e.preventDefault(); if (sugg.length) { setText(sugg[pick]! + " "); setPick(0); } else send(); }
+            if (sugg.length && e.key === "Tab") { e.preventDefault(); choose(sugg[pick]!.name); return; }
+            if (e.key === "Enter" && !e.shiftKey && !composing.current && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (sugg.length && sugg[pick]!.name !== text.trim()) choose(sugg[pick]!.name); // 고르기
+              else send();
+            }
           }}
           style={{ flex: 1, resize: "none", padding: "6px 8px", borderRadius: 8, border: "1px solid var(--bd-2)", background: "var(--surface-2)", color: "var(--fg)", font: "13px system-ui" }} />
         <button data-testid="chat-send" onClick={send} aria-label={t("Send")} style={{ padding: "0 12px", borderRadius: 8, border: 0, background: "var(--accent)", color: "var(--accent-text)", font: "600 12px system-ui", cursor: "pointer" }}>↑</button>

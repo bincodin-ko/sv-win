@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import ChatPanel from "../chat/ChatPanel";
+import ChatDock from "../chat/ChatDock";
 import AgentPicker from "../console/AgentPicker";
 import { consoleCwd, getRepoPath, sameFolder } from "../console/offers";
 import ResumeBanner from "../console/ResumeBanner";
@@ -220,9 +221,9 @@ function ConsoleNode({ id }: { id: string }) {
       <div ref={body} data-wheel-own style={{ flex: 1, minHeight: 0, overflow: "hidden", borderRadius: "0 0 10px 10px" }}
         onDoubleClick={() => term.current?.term.focus()} />
       {chat && (
-        <div style={maxed ? { position: "absolute", right: 8, top: 40, bottom: 8, width: 420, zIndex: 5 } : { position: "absolute", left: "calc(100% + 8px)", top: 0, width: 420, height: "100%" }}>
+        <ChatDock style={maxed ? { position: "absolute", right: 8, top: 40, bottom: 8, width: 420 } : { position: "absolute", left: "calc(100% + 8px)", top: 0, width: 420, height: "100%" }}>
           <ChatPanel getSession={getSession} onClose={() => setChat(false)} />
-        </div>
+        </ChatDock>
       )}
       {!maxed && HANDLES.map((h) => <div key={h} data-handle={h} style={handleStyle(h)} onPointerDown={startResize(h)} />)}
     </div>

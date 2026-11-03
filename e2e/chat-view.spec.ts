@@ -95,3 +95,50 @@ test("대기열 1번 — / 자동완성(내장 명령·스킬)과 / 명령은 �
   await expect.poll(() => page.evaluate((i) => ((window as any).__fakePty.writes(i) as string[]).join(""), sp.id)).toContain("/clear\r");
   expect(await page.evaluate((i) => ((window as any).__fakePty.writes(i) as string[]).join(""), sp.id)).not.toContain("\x1b[200~/clear");
 });
+
+// 남은일 468번: 휠로 목록이 굴러가고(보드는 안 움직임), 처음 열면 맨 아래(최근), 패널은 보드 줌 밖에서 CSS zoom 으로 그려 선명
+test("468번 — 휠로 굴리기·처음엔 맨 아래·보드 줌 밖에 그림", async ({ page }) => {
+  const sp = await open(page, "claude");
+  const sid = sp.args[sp.args.indexOf("--session-id") + 1]!;
+  await page.evaluate(([sid]) => {
+    const lines: string[] = [];
+    for (let i = 0; i < 60; i++) lines.push(JSON.stringify({ type: "user", message: { content: `질문 ${i}` } }), JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: `답 ${i}\n둘째 줄\n셋째 줄` }] } }));
+    (window as any).__fakeChat = { [sid as string]: lines };
+  }, [sid] as const);
+  await page.getByTestId("console-chat").click();
+  await expect(page.getByTestId("chat-user")).toHaveCount(60);
+  const list = page.getByTestId("chat-list");
+  await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(4); // 맨 아래
+  await expect(page.getByTestId("chat-assistant").last()).toBeInViewport();
+  // 보드 줌(world) 밖, 배율은 CSS zoom
+  const info = await page.evaluate(() => {
+    const d = document.querySelector('[data-testid="chat-dock"]') as HTMLElement;
+    const m = new DOMMatrix(getComputedStyle(document.querySelector('[data-testid="world"]')!).transform);
+    return { inWorld: !!d.closest('[data-testid="world"]'), zoom: Number((d.firstElementChild as HTMLElement).style.zoom), board: m.a };
+  });
+  expect(info.inWorld).toBe(false);
+  expect(info.zoom).toBeCloseTo(info.board, 2);
+  // 휠: 목록이 위로, 보드는 그대로
+  const before = await page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="world"]')!).transform);
+  const top0 = await list.evaluate((el) => el.scrollTop);
+  const b = (await list.boundingBox())!;
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.wheel(0, -600);
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeLessThan(top0 - 100);
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('[data-testid="world"]')!).transform)).toBe(before);
+});
+
+// 채팅 / 자동완성 = CLI 가 그린 / 메뉴 그대로(내장·스킬·플러그인·MCP 빠짐 없음). 친 글은 Ctrl+U 뒤 CLI 입력 줄에도 넣고, 지우면 CLI 줄도 비운다
+test("/ 자동완성은 CLI 메뉴를 그대로 — 입력 줄 맞추기·메뉴 읽기·지우면 비우기", async ({ page }) => {
+  const sp = await open(page, "claude");
+  await page.getByTestId("console-chat").click();
+  const writes = () => page.evaluate((i) => ((window as any).__fakePty.writes(i) as string[]).join(""), sp.id);
+  await page.getByTestId("chat-input").fill("/re");
+  await page.evaluate((i) => (window as any).__fakePty.emit(i, "\r\n    /remote-env                                     Choose the default environment for cloud agents\r\n    /rea:trace_crash (MCP)                          Correlate a crash symptom\r\n    /reverse-engineer-anything                      Reverse engineer native\r\n"), sp.id);
+  await expect(page.getByTestId("chat-slash").getByRole("option")).toHaveCount(3);
+  await expect(page.getByTestId("chat-slash").getByRole("option").nth(1)).toContainText("/rea:trace_crash");
+  await expect(page.getByTestId("chat-slash").getByRole("option").first()).toContainText("Choose the default environment");
+  expect(await writes()).toContain("\x15/re"); // CLI 입력 줄에도 같은 글
+  await page.getByTestId("chat-input").fill("");
+  await expect.poll(async () => (await writes()).endsWith("\x15")).toBe(true); // 지우면 CLI 줄도 비움
+});

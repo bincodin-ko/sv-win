@@ -87,3 +87,14 @@ export function slashSuggest(text: string, names: string[]): string[] {
   const q = text.toLowerCase();
   return [...new Set(names)].filter((n) => n.toLowerCase().startsWith(q) && n.toLowerCase() !== q).slice(0, 8);
 }
+
+/** CLI 가 그린 / 자동완성 메뉴(화면 줄)에서 명령·설명. "  ❯ /clear      Start a new…", "/rea:trace (MCP)  설명".
+ * 설치본 실측(Claude 2.1.317): 내장·스킬·플러그인·MCP 명령이 한 메뉴에 이 모양으로 뜬다 → 채팅 자동완성은 이 메뉴를 그대로 쓴다(빠짐 없음) */
+export function parseSlashMenu(lines: string[]): { name: string; desc: string }[] {
+  const out: { name: string; desc: string }[] = [];
+  for (const l of lines) {
+    const m = l.match(/^\s*(?:[❯›>]\s*)?(\/[^\s]+)(?:\s\(MCP\))?\s{2,}(\S.*)$/);
+    if (m) out.push({ name: m[1]!, desc: m[2]!.trim() });
+  }
+  return out;
+}

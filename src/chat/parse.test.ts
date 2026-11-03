@@ -61,3 +61,18 @@ describe("/ 자동완성", () => {
     expect(slashSuggest("/clear", names)).toEqual([]);
   });
 });
+
+import { parseSlashMenu } from "./parse";
+describe("CLI / 메뉴 읽기(설치본 실측 화면)", () => {
+  it("내장·플러그인·MCP 줄, 이어지는 설명 줄은 건너뜀", () => {
+    const l = [
+      "  ❯ /clear                                          Start a new session with empty context; previous session stays on",
+      "                                                    disk (resumable with /resume)",
+      "    /caveman:safe-refactor                          (caveman) Restructure code while preserving behavior. Use for",
+      "    /rea:trace_crash (MCP)                          Correlate a crash symptom with static call",
+      "────────────────",
+      "❯ /cle",
+    ];
+    expect(parseSlashMenu(l).map((x) => x.name)).toEqual(["/clear", "/caveman:safe-refactor", "/rea:trace_crash"]);
+  });
+});
