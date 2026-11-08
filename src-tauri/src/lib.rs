@@ -1,4 +1,5 @@
 pub mod agent_logs;
+pub mod outside;
 pub mod agents;
 pub mod boards;
 pub mod conversations;
@@ -92,6 +93,13 @@ async fn claude_live_session(state: State<'_, PtyManager>, id: u32, config_dir: 
     let mut pids: Vec<u32> = crate::suspend::tree(pid).into_iter().map(|e| e.0).collect();
     if pids.is_empty() { pids.push(pid); }
     Ok(pids.into_iter().find_map(|p| crate::transcripts::live_session_in(&dir, p)))
+}
+
+/// 안정화: 화면이 n 바이트를 처리했다(흐름 조절)
+#[tauri::command]
+async fn pty_ack(state: State<'_, PtyManager>, id: u32, n: u64) -> Result<(), String> {
+    state.ack(id, n);
+    Ok(())
 }
 
 #[tauri::command]
@@ -235,6 +243,7 @@ pub fn run() {
             resume::claude_transcript_exists_cmd,
             resume::codex_find_session_cmd,
             lifecycle::app_quit,
+            lifecycle::quit_ack,
             repo_info::repo_branch,
             gh::gh_status,
             gh::gh_logout,
@@ -291,6 +300,9 @@ pub fn run() {
             transcripts::last_reply_cmd,
             transcripts::chat_lines_cmd,
             claude_live_session,
+            pty_ack,
+            outside::outside_claudes,
+            outside::outside_claude_stop,
             agent_logs::agent_find_session,
             secrets::planner_key_set,
             secrets::planner_key_has,

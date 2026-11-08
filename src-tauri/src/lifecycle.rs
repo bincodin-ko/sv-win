@@ -1,7 +1,18 @@
 // A9 종료: 창 닫기를 가로채 프론트에 묻고(S-230), 확정되면 모든 PTY 를 끝내고 앱을 끈다(S-231).
 use crate::pty::PtyManager;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+/// 안정화: 창 닫기를 프론트에 넘긴 시각과, 프론트가 받았다고 알렸는지. 프론트가 멈추면 X 를 눌러도 영영 안 꺼졌다(사용자 보고)
+static PENDING: Mutex<Option<(Instant, bool)>> = Mutex::new(None);
+/// 프론트가 이만큼 답이 없으면 다음 X 에서 강제로 끈다
+pub const FORCE_AFTER: Duration = Duration::from_secs(3);
+
+/// 닫기 요청이 왔다: 지난 요청에 프론트가 답이 없고(ack 없음) FORCE_AFTER 가 지났으면 true(강제 종료)
+fn should_force(prev: Option<(Instant, bool)>, now: Instant) -> bool {
+    matches!(prev, Some((at, false)) if now.duration_since(at) >= FORCE_AFTER)
+}
 use tauri::{Emitter, Manager, State};
 
 /// 창 닫기(X·Alt+F4)를 막고 프론트에 "quit-requested" 를 보낸다.
@@ -16,6 +27,18 @@ pub fn on_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     }
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
+        let now = Instant::now();
+        let mut p = PENDING.lock().unwrap();
+        if should_force(*p, now) {
+            // 프론트가 멈춤: 저장 확인 없이 콘솔을 끝내고 앱을 끈다
+            let app = window.app_handle().clone();
+            drop(p);
+            let state = app.state::<PtyManager>();
+            app_quit(app.clone(), state);
+            return;
+        }
+        *p = Some((now, false));
+        drop(p);
         let _ = window.emit("quit-requested", ());
     }
 }
@@ -34,12 +57,31 @@ pub fn app_quit(app: tauri::AppHandle, state: State<'_, PtyManager>) {
     });
 }
 
+/// 프론트가 quit-requested 를 받았다(살아 있음). 이후 사용자가 취소해도 다음 X 는 다시 묻는다
+#[tauri::command]
+pub fn quit_ack() {
+    if let Some((_, ack)) = PENDING.lock().unwrap().as_mut() {
+        *ack = true;
+    }
+}
+
 fn intercepts_close(label: &str) -> bool {
     label == "main"
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn force_quit_only_when_frontend_silent_long_enough() {
+        use std::time::{Duration, Instant};
+        let t0 = Instant::now();
+        let later = t0 + super::FORCE_AFTER + Duration::from_millis(1);
+        assert!(!super::should_force(None, later)); // 처음 X
+        assert!(!super::should_force(Some((t0, true)), later)); // 프론트가 받음(취소했을 수 있음) → 다시 묻는다
+        assert!(!super::should_force(Some((t0, false)), t0 + Duration::from_millis(500))); // 너무 빨리 다시 누름
+        assert!(super::should_force(Some((t0, false)), later)); // 프론트가 답이 없음 → 강제 종료
+    }
+
     #[test]
     fn only_main_window_close_quits_app() {
         assert!(super::intercepts_close("main"));

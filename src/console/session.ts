@@ -13,7 +13,7 @@ import type { IMarker } from "@xterm/xterm";
 import { screenReply } from "../output/reply";
 import { setReply as setOutput } from "../output/useOutputs";
 import { pendingWriter } from "./pendingWriter";
-import { codexFindSession, debugTerms, isTauri, lastReply, ptyBatch, ptyKill, ptyPause, ptyResize, ptyResume, ptySpawn, ptyWrite } from "../lib/ipc";
+import { codexFindSession, debugTerms, isTauri, lastReply, ptyAck, ptyBatch, ptyKill, ptyPause, ptyResize, ptyResume, ptySpawn, ptyWrite } from "../lib/ipc";
 import { writeDim } from "../terminal/TerminalView";
 import { addTick } from "./ticker";
 import { GESTURE_QUIET_MS, createBatchWriter } from "../terminal/perf";
@@ -69,6 +69,8 @@ export interface Session {
   dispose(): void;
 }
 
+/** 안정화: 크기 바꾸기가 멈춘 뒤 CLI 에 크기를 보내기까지 기다림 */
+export const RESIZE_SETTLE_MS = 120;
 const sessions = new Map<string, Session>();
 export const getSession = (wsId: string, nodeId: string) => sessions.get(sessionKey(wsId, nodeId));
 export const getSessionByKey = (key: string) => sessions.get(key);
@@ -102,7 +104,20 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
   const unsubVp = useBoard.subscribe((s, p) => {
     if (s.viewport !== p.viewport) vpAt = Date.now();
   });
-  const bw = createBatchWriter((b) => term.write(b), { gesturing: () => Date.now() - vpAt < GESTURE_QUIET_MS });
+  // 안정화: xterm 이 다 처리하면 Rust 에 알려 흐름을 조절한다(화면이 못 따라가면 출력이 무한히 쌓이던 것)
+  // 안정화: 크기를 바꾸는 동안(끌기·줌·크게 보기) CLI 에 크기를 매번 보내면 ConPTY 가 화면을 다시 접고 Claude 가 다시 그리는 일이
+  // 겹쳐 글줄이 포개졌다 → 멈춘 뒤 한 번만(120ms), 같은 크기면 안 보낸다
+  let lastSize = "", sizeTimer: ReturnType<typeof setTimeout> | undefined;
+  const resizeSoon = () => {
+    clearTimeout(sizeTimer);
+    sizeTimer = setTimeout(() => {
+      const k = `${term.cols}x${term.rows}`;
+      if (ptyId === null || k === lastSize) return;
+      lastSize = k;
+      void ptyResize(ptyId, term.cols, term.rows);
+    }, RESIZE_SETTLE_MS);
+  };
+  const bw = createBatchWriter((b) => term.write(b, () => ptyId !== null && void ptyAck(ptyId, b.length)), { gesturing: () => Date.now() - vpAt < GESTURE_QUIET_MS });
   // P2: Rust 출력 묶음 간격 — 저사양이면 50ms, 안 보이는 콘솔은 100ms(보임 여부는 화면 교차로)
   let shown = true;
   const applyBatch = () => ptyId !== null && void ptyBatch(ptyId, isLowSpec(), shown);
@@ -221,7 +236,8 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
       if (g !== gen || disposed) return void ptyKill(id);
       ptyId = id;
       pw.setId(id);
-      if (term.cols !== sc || term.rows !== sr) void ptyResize(id, term.cols, term.rows);
+      lastSize = `${sc}x${sr}`;
+      if (term.cols !== sc || term.rows !== sr) resizeSoon();
       applyBatch();
       debugTerms.set(id, term);
     } catch (e) {
@@ -349,7 +365,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
     term.onData(input),
     // S-234: 배너 대신 콘솔에 타이핑하면 그 배너는 닫히고 새 대화로 간다(터미널이 자동으로 보내는 응답은 onKey 가 아니라 제외)
     term.onKey(() => useOffers.getState().drop(key)),
-    term.onResize(({ cols, rows }) => ptyId !== null && void ptyResize(ptyId, cols, rows)),
+    term.onResize(() => resizeSoon()),
   ];
   // 상태 시계 + 슬립 감지(S-072): 10초 타이머의 벽시계 간격이 90초를 넘으면 잠들었다 깬 것
   let lastWall = Date.now();
@@ -448,6 +464,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
       if (sid && !disposed) useOffers.getState().add({ nodeId: key, agentId, sessionId: sid });
     },
     dispose() {
+      clearTimeout(sizeTimer);
       disposed = true;
       useOffers.getState().drop(key); // 닫은 콘솔의 배너가 남지 않게
       killPty();

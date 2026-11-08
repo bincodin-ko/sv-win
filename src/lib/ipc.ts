@@ -226,7 +226,8 @@ export async function appQuit(): Promise<void> {
 /** 창 닫기(X·Alt+F4)를 Rust 가 가로챘다는 알림(S-230). 해제 함수를 돌려준다 */
 export function onQuitRequested(cb: () => void): () => void {
   if (!isTauri()) return () => {};
-  const un = import("@tauri-apps/api/event").then((m) => m.listen("quit-requested", cb));
+  // 받자마자 Rust 에 알린다: 알리지 못할 만큼 멈췄으면 다음 X 에서 Rust 가 강제로 끈다(안정화)
+  const un = import("@tauri-apps/api/event").then((m) => m.listen("quit-requested", () => { void invoke("quit_ack").catch(() => {}); cb(); }));
   return () => void un.then((f) => f());
 }
 
@@ -314,6 +315,22 @@ export async function chatLines(agent: string, repo: string, sessionId: string, 
   if (isTauri()) return invoke("chat_lines_cmd", { agent, repo, sessionId, configDir: configDir ?? null, from });
   const all = (window as unknown as { __fakeChat?: Record<string, string[]> }).__fakeChat?.[sessionId];
   return all ? { lines: all.slice(from), next: all.length } : null;
+}
+/** 바깥 Claude 가져오기: Symvibe 밖에서 돌고 있는 대화형 Claude. 가짜: window.__fakeOutside, 끄기는 __fakeOutsideStops 에 기록 */
+export type OutsideClaude = { pid: number; sessionId: string; cwd: string; startedAt: number; last: string };
+export async function outsideClaudes(): Promise<OutsideClaude[]> {
+  if (isTauri()) return invoke<OutsideClaude[]>("outside_claudes");
+  return (window as unknown as { __fakeOutside?: OutsideClaude[] }).__fakeOutside ?? [];
+}
+export async function outsideClaudeStop(pid: number, sessionId: string): Promise<void> {
+  if (isTauri()) return invoke("outside_claude_stop", { pid, sessionId });
+  const w = window as unknown as { __fakeOutside?: OutsideClaude[]; __fakeOutsideStops?: number[] };
+  (w.__fakeOutsideStops ??= []).push(pid);
+  w.__fakeOutside = (w.__fakeOutside ?? []).filter((o) => o.pid !== pid);
+}
+/** 안정화: 화면(xterm)이 n 바이트를 처리했다(Rust 흐름 조절). 가짜: 없음 */
+export async function ptyAck(id: number, n: number): Promise<void> {
+  if (isTauri()) return invoke("pty_ack", { id, n });
 }
 /** 채팅 보기: 이 PTY 의 claude 가 지금 쓰는 [대화 id, 폴더](Claude 의 sessions/<pid>.json). 가짜: window.__fakeLive[ptyId] */
 export async function claudeLiveSession(ptyId: number, configDir: string | undefined): Promise<[string, string] | null> {

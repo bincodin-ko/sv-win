@@ -93,5 +93,5 @@ test("141번 멈춘 콘솔 크게 보기 — 글꼴만 커지고, 재개하면 �
   await expect(pills(page).nth(0)).not.toHaveText("PAUSED");
   await expect.poll(async () => (await st()).cols).toBeGreaterThan(a.cols);
   expect((await st()).font).toBe(a.font);
-  expect(await resizes()).toBeGreaterThan(n);
+  await expect.poll(resizes).toBeGreaterThan(n);
 });

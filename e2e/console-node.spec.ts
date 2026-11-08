@@ -61,8 +61,11 @@ test("S-063 크기 끌기: 모서리로 늘리면 가짜 PTY 에 resize 기록, 
   await page.mouse.move(h.x + h.width / 2 + 120, h.y + h.height / 2 + 80, { steps: 8 });
   await page.mouse.up();
   expect(size((await nodeBox(page))!)).toEqual([840, 520]);
+  // 안정화: 끌기가 멈춘 뒤 한 번만 보낸다(120ms) — 끄는 동안 매번 보내면 Claude 화면이 포개졌다
+  await expect.poll(() => page.evaluate((i) => ((window as any).__fakePty.resizes(i) as unknown[]).length, id)).toBeGreaterThan(before);
   const r = await page.evaluate((i) => (window as any).__fakePty.resizes(i) as [number, number][], id);
-  expect(r.length).toBeGreaterThan(before);
+  expect(r.length - before).toBeLessThanOrEqual(2); // 8번 움직였어도 1~2번
+
   const t = await page.evaluate((i) => { const x = (window as any).__terms.get(i); return [x.cols, x.rows]; }, id);
   expect(r[r.length - 1]).toEqual(t);
   // 최소 크기

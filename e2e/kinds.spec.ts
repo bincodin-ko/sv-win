@@ -60,7 +60,7 @@ test.describe("C1 레일·놓기 도구", () => {
   test("FX4 S-803 레일 순서(영상 기준): Select, Spawn, Shapes, Diagrams, Text, Pen, Eraser, Web, Image, Fit", async ({ page }) => {
     await seed(page, [], "/");
     const ids = await page.locator('[data-testid="rail"] button').evaluateAll((bs) => bs.map((b) => b.getAttribute("data-testid")));
-    expect(ids).toEqual(["rail-select", "rail-spawn", "rail-shapes", "rail-diagrams", "rail-text", "rail-pen", "rail-eraser", "rail-web", "rail-image", "rail-fit"]);
+    expect(ids).toEqual(["rail-select", "rail-spawn", "rail-shapes", "rail-diagrams", "rail-text", "rail-pen", "rail-eraser", "rail-web", "rail-image", "rail-fit", "rail-hide"]); // 끝은 접기 단추(대기열 2번)
   });
 
   test("FX4 S-806 고리 순서: Spawn agent, Insert image, Insert web, Paste, Shapes, Spawn group, More", async ({ page }) => {

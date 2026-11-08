@@ -3,6 +3,7 @@
 import { useEffect, type CSSProperties } from "react";
 import { consoleHasFocus, installAppKeys } from "./appKeys";
 import LiveChip from "./LiveChip";
+import OutsideChip from "./OutsideChip";
 import NeedsYouChip from "./NeedsYouChip";
 import { chipStyle } from "./Menu";
 import RepoChip from "./RepoChip";
@@ -39,6 +40,7 @@ export default function TopBar() {
       </div>
       <div data-chrome style={pill}>
         <LiveChip />
+        <OutsideChip />
         <span data-testid="needs-you-slot"><NeedsYouChip /></span> {/* S-339: 조건(S-689)은 칩이 안다 */}
         <UsagePill />
         <ToolsMenu />

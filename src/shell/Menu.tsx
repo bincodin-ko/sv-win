@@ -44,7 +44,8 @@ export function Menu({ testId, label, children }: { testId: string; label: React
     <div ref={ref} style={{ position: "relative" }}>
       <button ref={btn} data-testid={testId} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} style={chipStyle}>{label}</button>
       {open && (
-        <div role="menu" style={{ position: "absolute", top: 30, left: 0, minWidth: 180, padding: 4, borderRadius: 8, background: "var(--panel)", border: "1px solid var(--border)", boxShadow: "0 8px 24px var(--scrim-40)", display: "grid", zIndex: 1 }}>
+        <div role="menu" style={{ position: "absolute", top: 30, ...(ref.current && ref.current.getBoundingClientRect().left > window.innerWidth / 2 ? { right: 0 } : { left: 0 }), minWidth: 180, // 오른쪽 칩은 왼쪽으로 펼쳐 창 밖으로 안 잘리게
+            padding: 4, borderRadius: 8, background: "var(--panel)", border: "1px solid var(--border)", boxShadow: "0 8px 24px var(--scrim-40)", display: "grid", zIndex: 1 }}>
           {children(() => setOpen(false))}
         </div>
       )}

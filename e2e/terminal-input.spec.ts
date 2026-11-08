@@ -99,6 +99,6 @@ test("S-073/S-134 Text size: 200% 면 cols 가 줄어든 resize, Global 로 돌�
   expect(await page.evaluate((i) => (window as any).__terms.get(i).options.fontSize as number, id)).toBe(25);
   await page.evaluate((n) => (window as any).__setTextSize(n, "global"), nodeId);
   await expect.poll(() => page.evaluate((i) => (window as any).__terms.get(i).cols as number, id)).toBe(cols0);
-  expect((await resizes(page, id)).at(-1)?.[0]).toBe(cols0);
+  await expect.poll(async () => (await resizes(page, id)).at(-1)?.[0]).toBe(cols0); // 크기 보내기는 멈춘 뒤 120ms(안정화)
   expect(await page.evaluate((i) => (window as any).__terms.get(i).options.fontSize as number, id)).toBe(12.5);
 });

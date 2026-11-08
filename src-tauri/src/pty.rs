@@ -83,11 +83,18 @@ impl Batcher {
 }
 
 pub type DataFn = Box<dyn FnMut(Vec<u8>) + Send>;
+/// 화면이 처리 못 한 바이트가 이만큼 넘으면 읽기를 늦춘다
+pub const INFLIGHT_HIGH: u64 = 1024 * 1024;
 pub type ExitFn = Box<dyn FnOnce(Option<u32>) + Send>;
 
 struct Session {
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    /// 안정화: 쓰기는 콘솔마다 따로 도는 쓰기 스레드로 넘긴다. 실측: 입력을 안 읽는(멈춘) 콘솔에 쓰면 한 번에 1.3초 막혔고,
+    /// 그동안 전체 잠금을 쥐고 있어 다른 콘솔 쓰기·크기 바꾸기·종료까지 기다렸다
+    input: mpsc::Sender<Vec<u8>>,
+    /// 안정화: 화면(xterm)이 아직 처리 못 한 바이트. 너무 쌓이면 읽기를 늦춘다(받은 쪽 ack)
+    inflight: Arc<AtomicU64>,
+    acking: Arc<AtomicBool>,
     killer: Box<dyn ChildKiller + Send + Sync>,
     exited: Arc<AtomicBool>,
     /// S-620: 자식(루트) PID. 일시 중지·재개가 이 PID 의 트리를 찾는다
@@ -159,14 +166,23 @@ impl PtyManager {
         let mut child = pair.slave.spawn_command(build_command(program, args, env, cwd)).map_err(e)?;
         drop(pair.slave); // 슬레이브를 남기면 ConPTY가 안 닫힌다
         let mut reader = pair.master.try_clone_reader().map_err(e)?;
-        let writer = pair.master.take_writer().map_err(e)?;
+        let mut writer = pair.master.take_writer().map_err(e)?;
+        let (input, in_rx) = mpsc::channel::<Vec<u8>>();
+        std::thread::spawn(move || {
+            for d in in_rx {
+                if writer.write_all(&d).and_then(|_| writer.flush()).is_err() {
+                    break;
+                }
+            }
+        }); // 보내는 쪽(input)이 닫히면 남은 것을 다 쓰고 writer 를 닫는다
         let killer = child.clone_killer();
         let pid = child.process_id();
         let id = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let exited = Arc::new(AtomicBool::new(false));
 
         // 읽기 스레드 → 묶음 스레드 (읽기는 막혀 있으므로 시간 재기는 따로)
-        let (tx, rx) = mpsc::channel::<Vec<u8>>();
+        // 묶음 64개(최대 1MB)까지만 쌓고 읽기를 멈춘다 → ConPTY 가 자식 출력을 늦춘다(화면이 못 따라가면 무한히 쌓이던 것)
+        let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(64);
         std::thread::spawn(move || {
             let mut buf = vec![0u8; 16 * 1024];
             loop {
@@ -183,6 +199,19 @@ impl PtyManager {
         let (code_tx, code_rx) = mpsc::channel::<Option<u32>>();
         let wait_ms = Arc::new(AtomicU64::new(BATCH_WAIT.as_millis() as u64));
         let wait_ms2 = wait_ms.clone();
+        let inflight = Arc::new(AtomicU64::new(0));
+        let acking = Arc::new(AtomicBool::new(false));
+        let (infl, ack_on) = (inflight.clone(), acking.clone());
+        let mut on_data = move |chunk: Vec<u8>| {
+            if ack_on.load(Ordering::Relaxed) {
+                let t = Instant::now(); // 화면이 처리 중인 양이 많으면 잠깐 기다린다(멈춰 버리지 않게 최대 3초)
+                while infl.load(Ordering::Relaxed) > INFLIGHT_HIGH && t.elapsed() < Duration::from_secs(3) {
+                    std::thread::sleep(Duration::from_millis(4));
+                }
+            }
+            infl.fetch_add(chunk.len() as u64, Ordering::Relaxed);
+            on_data(chunk);
+        };
         std::thread::spawn(move || {
             let mut b = Batcher::default();
             loop {
@@ -206,7 +235,7 @@ impl PtyManager {
 
         self.sessions.lock().unwrap().insert(
             id,
-            Session { master: pair.master, writer, killer, exited: exited.clone(), pid, frozen: None, wait_ms },
+            Session { master: pair.master, input, inflight, acking, killer, exited: exited.clone(), pid, frozen: None, wait_ms },
         );
 
         // 대기 스레드: 자식이 끝나면 ConPTY를 닫아 읽기 스레드에 EOF를 준다
@@ -221,10 +250,22 @@ impl PtyManager {
         Ok(id)
     }
 
+    /// 막히지 않는다: 쓰기 스레드에 넘기기만 한다
     pub fn write(&self, id: u32, data: &[u8]) -> Result<(), String> {
-        let mut map = self.sessions.lock().unwrap();
-        let s = map.get_mut(&id).ok_or("없는 터미널")?;
-        s.writer.write_all(data).and_then(|_| s.writer.flush()).map_err(|x| x.to_string())
+        let map = self.sessions.lock().unwrap();
+        let s = map.get(&id).ok_or("없는 터미널")?;
+        s.input.send(data.to_vec()).map_err(|_| "닫힌 터미널".to_string())
+    }
+
+    /// 화면(xterm)이 n 바이트를 처리했다. 처음 오면 흐름 조절을 켠다(ack 를 안 보내는 쪽은 예전처럼 그대로 흘려보낸다)
+    pub fn ack(&self, id: u32, n: u64) {
+        if let Some(s) = self.sessions.lock().unwrap().get(&id) {
+            s.acking.store(true, Ordering::Relaxed);
+            let mut cur = s.inflight.load(Ordering::Relaxed);
+            while let Err(now) = s.inflight.compare_exchange_weak(cur, cur.saturating_sub(n), Ordering::Relaxed, Ordering::Relaxed) {
+                cur = now;
+            }
+        }
     }
 
     pub fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
@@ -275,12 +316,12 @@ impl PtyManager {
     /// S-105: ConPTY 닫기(=CTRL_CLOSE_EVENT) → 2초 뒤에도 살아 있으면 강제 종료
     pub fn kill(&self, id: u32) -> Result<(), String> {
         let s = self.sessions.lock().unwrap().remove(&id).ok_or("없는 터미널")?;
-        let Session { master, writer, mut killer, exited, frozen, pid, .. } = s;
+        let Session { master, input, mut killer, exited, frozen, pid, .. } = s;
         let tree = pid.map(crate::suspend::tree).unwrap_or_default(); // 닫기 전에 잡아 둔다: 2초 뒤엔 부모 관계가 끊겼을 수 있다
         if let Some(t) = frozen {
             crate::suspend::resume_list(&t); // S-622: 멈춘 프로세스는 닫힘 신호를 못 받는다. 먼저 재개
         }
-        drop(writer);
+        drop(input); // 쓰기 스레드가 남은 것을 쓰고 writer 를 닫는다
         drop(master);
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(2));
@@ -544,5 +585,31 @@ mod tests {
         assert!(out.contains("GOOSE_MODE=auto"), "출력: {out:?}");
         assert!(out.contains("SYM_A5=x y"), "출력: {out:?}");
         assert!(out.contains("TERM_PROGRAM=Hypervibe"));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod block_probe {
+    use super::*;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+    /// 실측 회귀: 멈춘(입력을 안 읽는) 콘솔에 크게 써도 다른 호출(pid)이 기다리지 않는다. 고치기 전 1.37초
+    #[test]
+    fn write_to_paused_console_does_not_block_others() {
+        let m = Arc::new(PtyManager::default());
+        let id = m.spawn("cmd", &["/c".into(), "ping".into(), "-n".into(), "6".into(), "127.0.0.1".into()], &[], None, 80, 24, Box::new(|_| {}), Box::new(|_| {})).unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        m.pause(id).unwrap();
+        let chunk = vec![b'a'; 64 * 1024];
+        let t = Instant::now();
+        for _ in 0..40 {
+            m.write(id, &chunk).unwrap();
+        }
+        assert!(t.elapsed() < Duration::from_millis(200), "쓰기가 막힘: {:?}", t.elapsed());
+        let t = Instant::now();
+        let _ = m.pid(id);
+        assert!(t.elapsed() < Duration::from_millis(50), "다른 호출이 기다림: {:?}", t.elapsed());
+        let _ = m.resume(id);
+        let _ = m.kill(id);
     }
 }
