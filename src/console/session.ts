@@ -17,6 +17,7 @@ import { codexFindSession, debugTerms, isTauri, lastReply, ptyAck, ptyBatch, pty
 import { writeDim } from "../terminal/TerminalView";
 import { addTick } from "./ticker";
 import { GESTURE_QUIET_MS, createBatchWriter } from "../terminal/perf";
+import { isLight, lightenWhite } from "../terminal/lightWhite";
 import { isLowSpec } from "../perf/lowSpec";
 import { feed as autoFeed } from "../web/autoHost";
 import { confirmClose } from "./ConfirmClose";
@@ -117,7 +118,7 @@ export function createSession(o: { nodeId: string; term: Terminal; agentId: stri
       void ptyResize(ptyId, term.cols, term.rows);
     }, RESIZE_SETTLE_MS);
   };
-  const bw = createBatchWriter((b) => term.write(b, () => ptyId !== null && void ptyAck(ptyId, b.length)), { gesturing: () => Date.now() - vpAt < GESTURE_QUIET_MS });
+  const bw = createBatchWriter((b) => term.write(isLight() ? lightenWhite(b) : b, () => ptyId !== null && void ptyAck(ptyId, b.length)), { gesturing: () => Date.now() - vpAt < GESTURE_QUIET_MS });
   // P2: Rust 출력 묶음 간격 — 저사양이면 50ms, 안 보이는 콘솔은 100ms(보임 여부는 화면 교차로)
   let shown = true;
   const applyBatch = () => ptyId !== null && void ptyBatch(ptyId, isLowSpec(), shown);
