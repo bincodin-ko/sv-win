@@ -310,3 +310,23 @@ test.describe("파일 카드 메뉴·Missing (S-955·S-956)", () => {
     expect(Math.round(b1.y - b0.y)).toBe(50);
   });
 });
+
+test.describe("콘솔 위에 놓기 → CLI 입력 줄에 경로", () => {
+  const con = { id: "c1", kind: "console", x: -300, y: -200, w: 600, h: 400, z: 1, name: "A", agentId: "claude", textSize: null, yolo: false };
+  test("콘솔에 놓으면 경로(빈칸은 따옴표)가 CLI 로, 엔터·카드 없음 / 빈 곳은 카드", async ({ page }) => {
+    await open(page, { nodes: [con] });
+    await expect(page.getByTestId("console")).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => (window as any).__fakePty.ids().length)).toBe(1);
+    const id = await page.evaluate(() => (window as any).__fakePty.ids()[0]);
+    const r = (await page.getByTestId("console").boundingBox())!;
+    const dpr = await page.evaluate(() => devicePixelRatio);
+    await drop(page, ["C:/x/a.png", "C:/my docs/b c.txt"], { x: (r.x + r.width / 2) * dpr, y: (r.y + r.height / 2) * dpr });
+    await expect.poll(async () => ((await page.evaluate((i) => (window as any).__fakePty.writes(i), id)) as string[]).join("")).toContain('C:/x/a.png "C:/my docs/b c.txt" ');
+    const all = ((await page.evaluate((i) => (window as any).__fakePty.writes(i), id)) as string[]).join("");
+    expect(all).not.toMatch(/\r/);
+    const cards = async () => (await nodes(page)).filter((n) => n.kind !== "console").length;
+    expect(await cards()).toBe(0);
+    await drop(page, [`${REPO}/src/a.ts`], { x: 100 * dpr, y: 700 * dpr });
+    await expect.poll(cards).toBe(1);
+  });
+});

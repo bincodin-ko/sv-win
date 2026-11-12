@@ -10,6 +10,17 @@ import { t } from "../i18n";
 import DropChoice, { type Choice } from "./DropChoice";
 import { placeAll, prepare } from "./drop";
 import { inRepo } from "./inRepo";
+import { getSession } from "../console/session";
+
+/** 경로 여러 개를 CLI 에 넣을 글로: 띄어쓰기로 잇고, 빈칸이 있으면 "따옴표"(Windows 터미널 끌어놓기와 같은 방식) */
+export const pathsText = (paths: string[]) => paths.map((p) => (/\s/.test(p) ? `"${p}"` : p)).join(" ") + " ";
+
+/** 놓은 자리가 콘솔이면 그 노드 id(창 물리 픽셀 → CSS 픽셀) */
+function consoleAt(pos: DropPos): string | null {
+  if (!pos) return null;
+  const el = document.elementFromPoint(pos.x / window.devicePixelRatio, pos.y / window.devicePixelRatio);
+  return el?.closest('[data-testid="console"]')?.closest<HTMLElement>("[data-node-id]")?.dataset.nodeId ?? null;
+}
 
 type Ask = { canCopy: boolean; count: number; done: (c: Choice | null) => void };
 
@@ -39,6 +50,13 @@ export default function DropHost() {
       const repo = sh.activeRepo;
       const ws = sh.openRepos.find((r) => r.path === repo)?.activeWs;
       if (sh.view !== "board" || !repo || !ws || !paths.length) return;
+      // 콘솔 위에 놓으면 보드 카드 대신 그 CLI 입력 줄에 경로(엔터는 안 누름)
+      const node = consoleAt(pos);
+      const sess = node ? getSession(ws, node) : undefined;
+      if (sess) {
+        const text = pathsText(paths);
+        return void sess.write(sess.bracketedPaste() ? `\x1b[200~${text}\x1b[201~` : text);
+      }
       if (isHub(repo)) return void showNotice(t("Hub boards have no folder — drop files on a repo board")); // H5 S-2877
       const at = worldAt(ws, pos);
       let list = paths;
